@@ -28,6 +28,8 @@ class MongoDBManager:
             self.contact_messages = self.db['contact_messages']
             self.qr_sessions = self.db['qr_sessions']
             self.attendance_sessions = self.db['attendance_sessions']
+            self.verification_codes = self.db['verification_codes']
+            self.password_reset_codes = self.db['password_reset_codes']
             
             # Create indexes for better performance
             self._create_indexes()
