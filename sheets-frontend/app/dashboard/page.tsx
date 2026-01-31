@@ -699,20 +699,7 @@ export default function DashboardPage() {
             />
           ) : showAllClasses ? (
             <AllClassesView
-              classes={classes.map(cls => ({
-                ...cls,
-                students: cls.students.map(student => ({
-                  ...student,
-                  attendance: Object.entries(student.attendance).reduce((acc, [key, value]) => {
-                    if (typeof value === 'object' && 'sessions' in value) {
-                      acc[key] = { status: value.sessions[0]?.status || 'P' as const, count: value.sessions.length };
-                    } else {
-                      acc[key] = value;
-                    }
-                    return acc;
-                  }, {} as Record<string, 'P' | 'A' | 'L' | { status: 'P' | 'A' | 'L'; count: number } | undefined>)
-                }))
-              }))}
+              classes={classes}
               onBack={() => setShowAllClasses(false)}
               onClassSelect={handleClassSelect}
               onDeleteClass={async (classId) => {

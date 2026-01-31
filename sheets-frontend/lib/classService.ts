@@ -18,13 +18,22 @@ class ClassService {
   }
 
   private async apiCall<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      ...options,
-      headers: {
-        ...this.getAuthHeaders(),
-        ...(options.headers as Record<string, string>),
-      },
-    });
+    let response: Response;
+
+    try {
+      response = await fetch(`${API_URL}${endpoint}`, {
+        ...options,
+        headers: {
+          ...this.getAuthHeaders(),
+          ...(options.headers as Record<string, string>),
+        },
+      });
+    } catch (err) {
+      // Browser network errors (CORS blocked, backend down, connection reset) surface as TypeError("Failed to fetch").
+      // Provide a more actionable message.
+      const hint = `Network error calling ${API_URL}${endpoint}. Is the backend running on port 8000 and CORS allowing this origin?`;
+      throw new Error(hint);
+    }
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));

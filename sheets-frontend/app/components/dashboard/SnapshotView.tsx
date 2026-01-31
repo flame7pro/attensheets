@@ -60,16 +60,21 @@ export const SnapshotView: React.FC<SnapshotViewProps> = ({
         currentYear
       );
 
+      const hasAttendance = stats.total > 0;
+
       // Only count students with actual attendance data
-      if (stats.total > 0) {
+      if (hasAttendance) {
         totalAttendanceSum += stats.percentage;
         studentsWithAttendance++;
       }
 
       const status = getStatusFromPercentage(stats.percentage, thresholds);
 
-      if (status === 'excellent') excellentCount++;
-      if (status === 'risk') atRiskCount++;
+      // ✅ Important: don't mark students as "at risk" if they have no attendance records yet
+      if (hasAttendance) {
+        if (status === 'excellent') excellentCount++;
+        if (status === 'risk') atRiskCount++;
+      }
 
       studentStats.push({ student, attendance: stats.percentage, status });
     });
@@ -92,7 +97,9 @@ export const SnapshotView: React.FC<SnapshotViewProps> = ({
     ? classes.filter(cls => cls.name.toLowerCase().includes(searchQuery.toLowerCase()))
     : classes;
 
-  // ✅ FIXED: Calculate stats for FILTERED classes, excluding those with no attendance data
+  // Calculate stats for FILTERED classes (respects search)
+  // IMPORTANT: We compute from cls.students instead of trusting cls.statistics.
+  // Mongo/file backends can have stale or differently-shaped `statistics`, which breaks analytics.
   const calculateOverallStats = () => {
     let totalStudents = 0;
     let totalAttendanceSum = 0;
@@ -100,57 +107,39 @@ export const SnapshotView: React.FC<SnapshotViewProps> = ({
     let atRiskCount = 0;
     let excellentCount = 0;
 
-    // Use FILTERED classes for stats (respects search)
     filteredClasses.forEach(cls => {
-      // ✅ CRITICAL FIX: Use backend statistics if available (same as individual class display)
-      if (cls.statistics) {
-        // Backend already calculated correct stats - use them!
-        totalStudents += cls.statistics.totalStudents;
-        
-        // ✅ KEY FIX: Only include in average if class has actual attendance data
-        // Check: if avgAttendance = 0 AND no students in risk/excellent categories,
-        // then this class has NO attendance records (not just poor attendance)
-        const hasAttendanceData = 
-          cls.statistics.avgAttendance > 0 || 
-          cls.statistics.atRiskCount > 0 || 
-          cls.statistics.excellentCount > 0;
-        
-        if (hasAttendanceData) {
-          // Class has actual attendance records - include in average
-          totalAttendanceSum += cls.statistics.avgAttendance * cls.statistics.totalStudents;
-          studentsWithAttendance += cls.statistics.totalStudents;
+      const thresholds = cls.thresholds || defaultThresholds;
+      const students = cls.students || [];
+
+      totalStudents += students.length;
+
+      students.forEach(student => {
+        const stats = calculateStudentAttendance(
+          student.attendance,
+          daysInMonth,
+          currentMonth,
+          currentYear
+        );
+
+        const hasAttendance = stats.total > 0;
+
+        if (hasAttendance) {
+          totalAttendanceSum += stats.percentage;
+          studentsWithAttendance++;
         }
-        
-        atRiskCount += cls.statistics.atRiskCount;
-        excellentCount += cls.statistics.excellentCount;
-      } else {
-        // Fallback: calculate if backend stats not available
-        const thresholds = cls.thresholds || defaultThresholds;
-        totalStudents += cls.students.length;
 
-        cls.students.forEach(student => {
-          const stats = calculateStudentAttendance(
-            student.attendance,
-            daysInMonth,
-            currentMonth,
-            currentYear
-          );
+        const status = getStatusFromPercentage(stats.percentage, thresholds);
 
-          // Only count students with actual attendance data
-          if (stats.total > 0) {
-            totalAttendanceSum += stats.percentage;
-            studentsWithAttendance++;
-          }
-
-          if (stats.percentage < thresholds.moderate) atRiskCount++;
-          if (stats.percentage >= thresholds.excellent) excellentCount++;
-        });
-      }
+        // ✅ Important: don't classify "no data" students as at-risk/excellent
+        if (hasAttendance) {
+          if (status === 'risk') atRiskCount++;
+          if (status === 'excellent') excellentCount++;
+        }
+      });
     });
 
-    // ✅ Calculate average from weighted sum
-    const overallAttendance = studentsWithAttendance > 0 
-      ? totalAttendanceSum / studentsWithAttendance 
+    const overallAttendance = studentsWithAttendance > 0
+      ? totalAttendanceSum / studentsWithAttendance
       : 0;
 
     return {
@@ -163,40 +152,12 @@ export const SnapshotView: React.FC<SnapshotViewProps> = ({
   };
 
   const overallStats = calculateOverallStats();
-  const classesWithStats = filteredClasses.map(cls => {
-    // ✅ Use backend-calculated statistics if available, otherwise calculate on client
-    if (cls.statistics) {
-      // Backend already calculated correct stats based on enrollment mode
-      const studentStats = cls.students.map(student => {
-        const stats = calculateStudentAttendance(
-          student.attendance,
-          daysInMonth,
-          currentMonth,
-          currentYear
-        );
-        const thresholds = cls.thresholds || defaultThresholds;
-        const status = getStatusFromPercentage(stats.percentage, thresholds);
-        return { student, attendance: stats.percentage, status };
-      }).sort((a, b) => b.attendance - a.attendance);
 
-      return {
-        class: cls,
-        stats: {
-          avgAttendance: cls.statistics.avgAttendance.toFixed(1),
-          studentCount: cls.statistics.totalStudents,
-          atRiskCount: cls.statistics.atRiskCount,
-          excellentCount: cls.statistics.excellentCount,
-          studentStats,
-        }
-      };
-    } else {
-      // Fallback: calculate if backend stats not available
-      return {
-        class: cls,
-        stats: calculateClassStats(cls),
-      };
-    }
-  });
+  // Always compute per-class stats from students + selected month/year.
+  const classesWithStats = filteredClasses.map(cls => ({
+    class: cls,
+    stats: calculateClassStats(cls),
+  }));
 
   const getStatusColor = (status: string) => {
     switch (status) {

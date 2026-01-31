@@ -810,13 +810,35 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
     }
   };
 
+  const compareRollNo = (a: any, b: any) => {
+    const ra = String(a?.rollNo ?? '').trim();
+    const rb = String(b?.rollNo ?? '').trim();
+
+    if (!ra && !rb) return String(a?.name ?? '').localeCompare(String(b?.name ?? ''), undefined, { numeric: true, sensitivity: 'base' });
+    if (!ra) return 1; // empty last
+    if (!rb) return -1;
+
+    const na = /^[0-9]+$/.test(ra) ? parseInt(ra, 10) : NaN;
+    const nb = /^[0-9]+$/.test(rb) ? parseInt(rb, 10) : NaN;
+
+    const aIsNum = Number.isFinite(na);
+    const bIsNum = Number.isFinite(nb);
+
+    if (aIsNum && bIsNum) return na - nb;
+    if (aIsNum) return -1;
+    if (bIsNum) return 1;
+
+    return ra.localeCompare(rb, undefined, { numeric: true, sensitivity: 'base' });
+  };
+
   // Filter students based on search query
-  const filteredStudents = searchQuery.trim()
+  const filteredStudents = (searchQuery.trim()
     ? activeClass.students.filter(student =>
       student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       student.rollNo.toLowerCase().includes(searchQuery.toLowerCase())
     )
-    : activeClass.students;
+    : activeClass.students
+  ).slice().sort(compareRollNo);
 
 
   // Fetch sessions for the current month

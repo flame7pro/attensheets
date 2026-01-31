@@ -4,5 +4,7 @@ pydantic
 pydantic[email]
 python-dotenv
 PyJWT
-sqlalchemy
-psycopg2-binary
+pymongo
+dnspython
+user-agents
+sib-api-v3-sdk

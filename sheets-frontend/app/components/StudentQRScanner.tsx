@@ -33,59 +33,129 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
             try {
                 const regionId = 'qr-reader';
                 const elem = document.getElementById(regionId);
-                if (!elem) {
-                    console.error('qr-reader element not found');
-                    return;
-                }
+                if (!elem) return;
+
+                // Request permissions explicitly first (better errors on iOS/Safari)
+                await navigator.mediaDevices.getUserMedia({ video: true });
 
                 if (!html5QrRef.current) {
                     html5QrRef.current = new Html5Qrcode(regionId);
                 }
 
-                await html5QrRef.current.start(
-                    {
-                        facingMode: { exact: "environment" } // 🔑 important
+                // Cross-device configuration
+                const config = {
+                    fps: 10,
+                    qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+                        // Make the scan box larger so the corner markers appear more separated.
+                        // Keep it capped so it fits nicely on small phones.
+                        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                        const size = Math.max(220, Math.min(360, Math.floor(minEdge * 0.78)));
+                        return { width: size, height: size };
                     },
-                    {
-                        fps: 10,
-                        qrbox: { width: 250, height: 250 },
-                        aspectRatio: 1.0
-                    },
-                    onScanSuccess,
-                    onScanFailure
-                );
+                    aspectRatio: 1.0,
+                };
 
-                const video = document.querySelector('#qr-reader video') as HTMLVideoElement | null;
-                if (video) {
-                    video.setAttribute('playsinline', 'true'); // iOS Safari fix
-                    video.muted = true;                        // mobile autoplay rule
+                const startWith = async (
+                    cameraIdOrConstraints: string | MediaTrackConstraints
+                ) => {
+                    if (!html5QrRef.current) return;
+                    await html5QrRef.current.start(
+                        cameraIdOrConstraints,
+                        config,
+                        onScanSuccess,
+                        onScanFailure
+                    );
+                };
+
+                // Prefer selecting a camera by ID string (this is what html5-qrcode officially supports).
+                // Passing a MediaTrackConstraints object with deviceId can trigger validation errors.
+                let cameras: Array<{ id: string; label: string }> = [];
+                try {
+                    cameras = await Html5Qrcode.getCameras();
+                } catch {
+                    cameras = [];
                 }
 
-            } catch (err: any) {
-                console.error('Camera start error:', err);
+                const pickBestCameraId = () => {
+                    if (!cameras.length) return null;
+
+                    const scored = cameras.map((c, idx) => {
+                        const label = (c.label || '').toLowerCase();
+                        let score = 0;
+
+                        // Prefer rear/back cameras (common on mobiles/tablets)
+                        if (label.includes('back') || label.includes('rear') || label.includes('environment')) score += 100;
+                        // Avoid common virtual cams if possible
+                        if (label.includes('virtual') || label.includes('obs') || label.includes('manycam')) score -= 50;
+                        // Slightly prefer later cameras
+                        score += idx;
+
+                        return { id: c.id, score };
+                    });
+
+                    scored.sort((a, b) => b.score - a.score);
+                    return scored[0]?.id || null;
+                };
+
+                const bestId = pickBestCameraId();
+
+                // 1) Try explicit camera ID (best for laptops/tablets with multiple cameras)
+                if (bestId) {
+                    try {
+                        await startWith(bestId);
+                        return;
+                    } catch (e) {
+                        console.warn('[SCANNER] cameraId start failed, falling back:', e);
+                    }
+                }
+
+                // 2) Fallback to facingMode environment
+                try {
+                    await startWith({ facingMode: 'environment' });
+                    return;
+                } catch (e) {
+                    console.warn('[SCANNER] environment camera start failed, trying user camera:', e);
+                }
+
+                // 3) Final fallback: user camera
+                await startWith({ facingMode: 'user' });
+            } catch (err: unknown) {
+                console.error('[SCANNER] Initialization failed:', err);
                 setResult({
                     success: false,
-                    message: 'Cannot access camera. Please allow camera permission and try again.',
+                    message: 'Camera access denied or not found. Please ensure permissions are enabled.',
                 });
                 setScanning(false);
             }
         };
 
         setupScanner();
+
+        return () => {
+            const inst = html5QrRef.current;
+            if (!inst) return;
+
+            // html5-qrcode throws "Cannot clear while scan is ongoing" if clear() is called
+            // before stop() fully completes. Chain them.
+            inst
+                .stop()
+                .then(() => inst.clear())
+                .catch(() => {
+                    // ignore
+                })
+                .finally(() => {
+                    if (html5QrRef.current === inst) {
+                        html5QrRef.current = null;
+                    }
+                });
+        };
     }, [scanning]);
 
-    const stopScanning = async () => {
+    const stopScanning = () => {
+        // Keep this synchronous to avoid React/Next concurrent transition issues.
+        // Camera teardown is handled by the useEffect cleanup when `scanning` changes or the component unmounts.
         setScanning(false);
         setProcessing(false);
-        if (html5QrRef.current) {
-            try {
-                await html5QrRef.current.stop();
-                await html5QrRef.current.clear();
-            } catch {
-                // ignore
-            }
-            html5QrRef.current = null;
-        }
     };
 
     const onScanSuccess = async (decodedText: string) => {
@@ -239,8 +309,11 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                         <p className="text-teal-50 text-xs md:text-sm mt-1">Mark your attendance</p>
                     </div>
                     <button
-                        onClick={async () => {
-                            await stopScanning();
+                        onClick={() => {
+                            // Avoid async stop/close races that can trigger React/Next.js transition errors.
+                            // The effect cleanup handles releasing the camera on unmount.
+                            setScanning(false);
+                            setProcessing(false);
                             onClose();
                         }}
                         className="p-2 hover:bg-teal-700 rounded-lg transition-colors cursor-pointer"
@@ -376,9 +449,34 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            <div className="bg-slate-900 rounded-xl overflow-hidden">
-                                <div id="qr-reader" className="w-full" />
+                            {/*
+                              html5-qrcode injects its own markup inside #qr-reader.
+                              We wrap it in a constrained, responsive, aspect-square container so it
+                              looks consistent on phones/tablets/laptops.
+                            */}
+                            <div className="w-full max-w-md mx-auto">
+                                <div className="relative aspect-square bg-black rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
+                                    <div id="qr-reader" className="absolute inset-0" />
+                                </div>
                             </div>
+
+                            {/* Clean up html5-qrcode injected UI pieces (we control start/stop ourselves) */}
+                            <style jsx global>{`
+                                #qr-reader video {
+                                    width: 100% !important;
+                                    height: 100% !important;
+                                    object-fit: cover !important;
+                                }
+                                #qr-reader__dashboard,
+                                #qr-reader__dashboard_section,
+                                #qr-reader__status_span,
+                                #qr-reader__header_message {
+                                    display: none !important;
+                                }
+                                #qr-reader__scan_region {
+                                    min-height: 100% !important;
+                                }
+                            `}</style>
 
                             <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 md:p-4">
                                 <h4 className="font-semibold text-blue-900 text-xs md:text-sm mb-2">

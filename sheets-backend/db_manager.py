@@ -579,6 +579,22 @@ class DatabaseManager:
 
     # ==================== CLASS OPERATIONS ====================
     
+    def _sort_students_by_roll(self, students: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Sort students by rollNo (numeric first, then alphanumeric, then empty last)."""
+        def key_fn(s: Dict[str, Any]):
+            raw = (s.get("rollNo") or "").strip()
+            name = (s.get("name") or "").strip().casefold()
+
+            if not raw:
+                return (2, float("inf"), "", name)
+
+            if raw.isdigit():
+                return (0, int(raw), "", name)
+
+            return (1, float("inf"), raw.casefold(), name)
+
+        return sorted(list(students or []), key=key_fn)
+
     def create_class(self, user_id: str, class_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create a new class"""
         class_id = str(class_data["id"])
@@ -586,6 +602,10 @@ class DatabaseManager:
         # NEW: Get enrollment_mode with default
         enrollment_mode = class_data.get("enrollment_mode", "manual_entry")
         
+        # Always keep students stored roll-number sorted.
+        class_data = class_data.copy()
+        class_data["students"] = self._sort_students_by_roll(class_data.get("students", []))
+
         full_class_data = {
             **class_data,
             "teacher_id": user_id,
@@ -621,7 +641,7 @@ class DatabaseManager:
             active_students = [s for s in all_students if s.get('id') in active_record_ids]
             
             class_data_copy = class_data.copy()
-            class_data_copy['students'] = active_students
+            class_data_copy['students'] = self._sort_students_by_roll(active_students)
             
             # Recalculate statistics with active students only
             class_data_copy['statistics'] = self.calculate_class_statistics(class_data_copy, class_id)
@@ -631,7 +651,8 @@ class DatabaseManager:
         else:
             # MANUAL/IMPORT MODE: Return all students with correct statistics
             print(f"[GET_CLASS] Manual/Import mode - returning all {len(class_data.get('students', []))} students")
-            
+
+            class_data['students'] = self._sort_students_by_roll(class_data.get('students', []))
             # Recalculate statistics to ensure they're up to date
             class_data['statistics'] = self.calculate_class_statistics(class_data, class_id)
             
@@ -677,7 +698,7 @@ class DatabaseManager:
                         active_students = [s for s in all_students if s.get('id') in active_record_ids]
                         
                         class_data_copy = class_data.copy()
-                        class_data_copy['students'] = active_students
+                        class_data_copy['students'] = self._sort_students_by_roll(active_students)
                         
                         # ✅ RECALCULATE
                         class_data_copy['statistics'] = self.calculate_class_statistics(class_data_copy, class_id)
@@ -695,6 +716,7 @@ class DatabaseManager:
                         # ⭐ NEW: SAVE BACK TO FILE
                         self.write_json(class_file, class_data)
                         
+                        class_data['students'] = self._sort_students_by_roll(class_data.get('students', []))
                         classes.append(class_data)
         
         return classes
@@ -757,15 +779,17 @@ class DatabaseManager:
                     # Inactive student - preserve from file
                     final_students.append(student)
             
-            class_data['students'] = final_students
+            class_data['students'] = self._sort_students_by_roll(final_students)
         
         else:
             # MANUAL/IMPORT MODE: Just save students directly from request
             print(f"[UPDATE_CLASS] Manual/Import mode - saving {len(class_data.get('students', []))} students directly")
-            # class_data['students'] already contains what we need from the request
+            class_data['students'] = self._sort_students_by_roll(class_data.get('students', []))
+            # class_data['students'] now sorted
         
         # Merge with current class data
         current_class.update(class_data)
+        current_class['students'] = self._sort_students_by_roll(current_class.get('students', []))
         current_class["updated_at"] = datetime.utcnow().isoformat()
         current_class["statistics"] = self.calculate_class_statistics(current_class, class_id)
         

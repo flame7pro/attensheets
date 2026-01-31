@@ -25,6 +25,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
     const [isStopping, setIsStopping] = useState<boolean>(false);
     const [timeLeft, setTimeLeft] = useState(rotationInterval);
     const [sessionNumber, setSessionNumber] = useState<number>(1);
+    const [lastRotationAt, setLastRotationAt] = useState<string | null>(null);
     const [notification, setNotification] = useState<{
         type: 'success' | 'error' | 'info';
         message: string;
@@ -45,7 +46,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 return;
             }
 
-            // Start QR session with just class_id and date
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_URL}/qr/start-session`,
                 {
@@ -70,13 +70,20 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             const data = await response.json();
             console.log('[QR MODAL] Session started:', data);
 
+            const serverInterval = Number(data?.session?.rotation_interval ?? rotationInterval);
+            const serverLastRotation =
+                data?.session?.last_rotation ?? data?.session?.code_generated_at ?? data?.session?.started_at ?? null;
+
             setIsActive(true);
+            setRotationInterval(Number.isFinite(serverInterval) ? serverInterval : rotationInterval);
+            setLastRotationAt(serverLastRotation);
             setCurrentCode(data.session.current_code);
             setScannedCount(data.session.scanned_students?.length ?? 0);
             setSessionNumber(data.session.session_number || 1);
-            setTimeLeft(rotationInterval);
 
-            // Create QR code data
+            // This will be kept in sync by the countdown effect below, but set an initial value.
+            setTimeLeft(Number.isFinite(serverInterval) ? serverInterval : rotationInterval);
+
             const qrData = {
                 class_id: String(classId),
                 date: currentDate,
@@ -94,9 +101,10 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
             setQrCodeUrl(url);
             showNotification('success', `Session ${data.session.session_number} started!`);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('[QR MODAL] Start session error:', err);
-            showNotification('error', err.message || 'Error starting QR session');
+            const message = err instanceof Error ? err.message : 'Error starting QR session';
+            showNotification('error', message);
         }
     };
 
@@ -122,18 +130,30 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 const data = await res.json();
                 if (!data.active || !data.session) return;
 
-                setScannedCount(data.session.scanned_students.length);
-                setSessionNumber(data.session.session_number || 1);
+                const session = data.session;
+                setScannedCount(session.scanned_students?.length ?? 0);
+                setSessionNumber(session.session_number || 1);
 
-                if (data.session.current_code !== currentCode) {
-                    console.log('[QR MODAL] Code rotated:', data.session.current_code);
-                    setCurrentCode(data.session.current_code);
-                    setTimeLeft(rotationInterval);
+                const serverInterval = Number(session.rotation_interval ?? rotationInterval);
+                if (Number.isFinite(serverInterval) && serverInterval !== rotationInterval) {
+                    setRotationInterval(serverInterval);
+                }
+
+                const serverLastRotation = session.last_rotation ?? session.code_generated_at ?? session.started_at ?? null;
+                if (serverLastRotation) {
+                    setLastRotationAt(serverLastRotation);
+                }
+
+                // Always sync the code from the server; only regenerate the QR image if it changed.
+                const newCode = session.current_code;
+                if (typeof newCode === 'string' && newCode && newCode !== currentCode) {
+                    console.log('[QR MODAL] Code rotated:', newCode);
+                    setCurrentCode(newCode);
 
                     const qrData = {
                         class_id: String(classId),
                         date: currentDate,
-                        code: data.session.current_code,
+                        code: newCode,
                     };
 
                     const qrDataString = JSON.stringify(qrData);
@@ -145,7 +165,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
                     setQrCodeUrl(url);
                 }
-            } catch (e) {
+            } catch (e: unknown) {
                 console.error('[QR MODAL] Poll error', e);
             }
         }, 1000);
@@ -153,16 +173,31 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         return () => clearInterval(interval);
     }, [isActive, classId, currentCode, rotationInterval, currentDate]);
 
-    // Countdown timer
+    // Countdown timer (computed from last rotation time to stay accurate even if timers are throttled)
     useEffect(() => {
-        if (!isActive) return;
+        if (!isActive || !lastRotationAt) return;
+
+        const parseIso = (value: string) => {
+            // Handle both "2026-01-01T00:00:00.000" and "...Z"
+            const v = value.endsWith('Z') ? value.slice(0, -1) : value;
+            const d = new Date(v);
+            return Number.isNaN(d.getTime()) ? null : d;
+        };
 
         const t = setInterval(() => {
-            setTimeLeft(prev => (prev <= 1 ? rotationInterval : prev - 1));
-        }, 1000);
+            const last = parseIso(lastRotationAt);
+            if (!last || !Number.isFinite(rotationInterval) || rotationInterval <= 0) {
+                setTimeLeft(rotationInterval);
+                return;
+            }
+
+            const elapsedSeconds = Math.floor((Date.now() - last.getTime()) / 1000);
+            const left = rotationInterval - (elapsedSeconds % rotationInterval);
+            setTimeLeft(left <= 0 ? rotationInterval : left);
+        }, 500);
 
         return () => clearInterval(t);
-    }, [isActive, rotationInterval]);
+    }, [isActive, rotationInterval, lastRotationAt]);
 
     const stopSession = async () => {
         setIsStopping(true);
@@ -201,9 +236,10 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             setTimeout(() => {
                 onClose();
             }, 2000);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Stop session error:', err);
-            showNotification('error', err.message || 'Failed to stop session');
+            const message = err instanceof Error ? err.message : 'Failed to stop session';
+            showNotification('error', message);
         } finally {
             setIsStopping(false);
         }

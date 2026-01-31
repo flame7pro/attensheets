@@ -15,32 +15,70 @@ import random
 import string
 from dotenv import load_dotenv
 import ssl
-from db_manager import DatabaseManager
 from user_agents import parse as parse_user_agent
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
 
-load_dotenv()
+# Load environment variables from this file's directory so running uvicorn from repo root still works
+ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
+load_dotenv(dotenv_path=ENV_PATH)
 
 app = FastAPI(title="Lernova Attendsheets API")
 
-# Initialize Database Manager
-db = DatabaseManager(base_dir="data")
+# Check database type from environment
+DB_TYPE = os.getenv("DB_TYPE", "file")  # "file" or "mongodb"
+
+if DB_TYPE == "mongodb":
+    from mongodb_manager import MongoDBManager
+    MONGO_URI = os.getenv("MONGO_URI")
+    MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "lernova_db")
+    
+    if not MONGO_URI:
+        raise ValueError("MONGO_URI environment variable not set")
+    
+    db = MongoDBManager(mongo_uri=MONGO_URI, db_name=MONGO_DB_NAME)
+    print("✅ Using MongoDB for storage")
+else:
+    from db_manager import DatabaseManager
+    db = DatabaseManager(base_dir="data")
+    print("✅ Using file-based storage")
+
+# Environment
+APP_ENV = os.getenv("APP_ENV", "development").lower()  # development | production
 
 # CORS Configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# In production you should set CORS_ORIGINS to a comma-separated list, e.g.
+#   CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+cors_origins_env = os.getenv("CORS_ORIGINS", "").strip()
+
+cors_kwargs: Dict[str, Any] = {
+    "allow_credentials": True,
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+}
+
+if cors_origins_env:
+    # Strict allow-list
+    cors_kwargs["allow_origins"] = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
+else:
+    # Dev-friendly defaults (localhost + LAN IPs for phone/tablet testing)
+    cors_kwargs["allow_origins"] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+    ]
+    cors_kwargs["allow_origin_regex"] = r"https?://(localhost|127\\.0\\.0\\.1|\\d+\\.\\d+\\.\\d+\\.\\d+)(:\\d+)?$"
+
+app.add_middleware(CORSMiddleware, **cors_kwargs)
 
 # Security
 security = HTTPBearer()
 
 # Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
+if APP_ENV != "development" and SECRET_KEY == "your-secret-key-change-this-in-production":
+    raise ValueError("SECRET_KEY must be set in production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
@@ -613,7 +651,7 @@ def read_root():
         "message": "Lernova Attendsheets API",
         "version": "1.0.0",
         "status": "online",
-        "database": "file-based"
+        "database": DB_TYPE
     }
 
 
@@ -1625,13 +1663,10 @@ async def update_class(
             raise HTTPException(status_code=404, detail="User not found")
         
         user_id = user["id"]
+        payload = class_data.model_dump()
         
         # Let db_manager handle ALL the logic
-        updated_class = db.update_class(
-            user_id,
-            class_id,
-            class_data.model_dump()
-        )
+        updated_class = db.update_class(user_id, class_id, payload)
         
         print(f"[UPDATE_CLASS API] ✅ Class updated successfully")
         print(f"{'='*60}\n")
@@ -1639,6 +1674,56 @@ async def update_class(
         return {"success": True, "class": updated_class}
     
     except ValueError as e:
+        # Fallback for MongoDB numeric-id mismatches (prevents false 404s)
+        if DB_TYPE == "mongodb" and hasattr(db, "classes"):
+            try:
+                from datetime import datetime
+
+                # Try to locate the class doc using a few id representations
+                id_candidates = []
+                id_candidates.append(class_id)
+                try:
+                    id_candidates.append(int(class_id))
+                except Exception:
+                    pass
+                try:
+                    id_candidates.append(int(payload.get("id")))
+                except Exception:
+                    pass
+
+                # de-dupe candidates
+                seen = set()
+                deduped = []
+                for v in id_candidates:
+                    k = (type(v), v)
+                    if k in seen:
+                        continue
+                    seen.add(k)
+                    deduped.append(v)
+
+                existing = db.classes.find_one({"teacher_id": user_id, "id": {"$in": deduped}}, {"_id": 0})
+                if existing:
+                    stored_id = existing.get("id")
+                    payload["teacher_id"] = user_id
+                    payload["id"] = stored_id
+                    payload["updated_at"] = datetime.utcnow().isoformat()
+
+                    # Recompute stats if the db object supports it
+                    if hasattr(db, "calculate_class_statistics"):
+                        try:
+                            payload["statistics"] = db.calculate_class_statistics(payload, str(stored_id))
+                        except Exception:
+                            pass
+
+                    db.classes.update_one({"teacher_id": user_id, "id": stored_id}, {"$set": payload})
+                    updated = db.classes.find_one({"teacher_id": user_id, "id": stored_id}, {"_id": 0})
+
+                    print("[UPDATE_CLASS API] ✅ Class updated successfully (MongoDB fallback)")
+                    print(f"{'='*60}\n")
+                    return {"success": True, "class": updated}
+            except Exception as fallback_err:
+                print(f"[UPDATE_CLASS API] MongoDB fallback failed: {fallback_err}")
+
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         print(f"[UPDATE_CLASS API] ❌ Error: {e}")

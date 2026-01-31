@@ -14,21 +14,27 @@ import { StudentQRScanner } from '../../components/StudentQRScanner';
 interface ClassDetails {
   class_id: string;
   class_name: string;
-  teacher_name: string;
+  teacher_name?: string;
   student_record: {
-    id: number;
+    id: any;
     name: string;
     rollNo: string;
     email: string;
-    attendance: Record<string, 'P' | 'A' | 'L' | undefined>;
+    // Can be 'P'/'A'/'L' OR multi-session objects
+    attendance: Record<string, any>;
   };
-  statistics: {
-    total_classes: number;
-    present: number;
-    absent: number;
-    late: number;
-    percentage: number;
-    status: string;
+  // Backend may return different shapes depending on storage version; we normalize at render time.
+  statistics?: {
+    total_classes?: number;
+    present?: number;
+    absent?: number;
+    late?: number;
+    percentage?: number;
+    // legacy fields
+    attendance_percentage?: number;
+    present_days?: number;
+    total_days?: number;
+    status?: string;
   };
 }
 
@@ -204,6 +210,21 @@ export default function StudentDashboard() {
     return null;
   }
 
+  const getPercentage = (stats: any): number => {
+    const pct = stats?.percentage ?? stats?.attendance_percentage ?? stats?.attendancePercentage;
+    const num = Number(pct);
+    return Number.isFinite(num) ? num : 0;
+  };
+
+  const getCount = (value: any): number => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : 0;
+  };
+
+  const getStatus = (stats: any): string => {
+    return String(stats?.status ?? 'no data');
+  };
+
   // Filter classes based on search query
   const filteredClasses = classes.filter(classInfo => {
     const query = searchQuery.toLowerCase().trim();
@@ -215,12 +236,19 @@ export default function StudentDashboard() {
     return className.includes(query) || teacherName.includes(query);
   });
 
-  const overallStats = classes.length > 0 ? {
-    totalClasses: classes.length,
-    avgAttendance: classes.reduce((sum, c) => sum + c.statistics.percentage, 0) / classes.length,
-    totalPresent: classes.reduce((sum, c) => sum + c.statistics.present, 0),
-    totalAbsent: classes.reduce((sum, c) => sum + c.statistics.absent, 0),
-  } : null;
+  const overallStats = classes.length > 0 ? (() => {
+    const percentages = classes.map(c => getPercentage(c.statistics));
+    const avgAttendance = percentages.length > 0
+      ? percentages.reduce((sum, p) => sum + p, 0) / percentages.length
+      : 0;
+
+    return {
+      totalClasses: classes.length,
+      avgAttendance,
+      totalPresent: classes.reduce((sum, c) => sum + getCount(c.statistics?.present ?? c.statistics?.present_days), 0),
+      totalAbsent: classes.reduce((sum, c) => sum + getCount(c.statistics?.absent), 0),
+    };
+  })() : null;
 
   return (
     <div className="min-h-screen h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 flex flex-col overflow-hidden">
@@ -286,7 +314,7 @@ export default function StudentDashboard() {
           classes={classes.map(c => ({
             classid: c.class_id,
             classname: c.class_name,
-            teachername: c.teacher_name
+            teachername: c.teacher_name ?? 'Unknown'
           }))}
           onEnrollClick={() => setShowEnrollModal(true)}
           onViewDashboard={() => { }}
@@ -323,7 +351,7 @@ export default function StudentDashboard() {
                   </div>
                 </div>
                 <p className="text-xs text-slate-600 mb-1">Avg Attendance</p>
-                <p className="text-2xl font-bold text-slate-900">{overallStats.avgAttendance.toFixed(1)}%</p>
+                <p className="text-2xl font-bold text-slate-900">{(overallStats.avgAttendance ?? 0).toFixed(1)}%</p>
               </div>
 
               <div className="bg-white rounded-xl p-4 md:p-5 shadow-md border border-emerald-200">
@@ -398,7 +426,10 @@ export default function StudentDashboard() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
               {filteredClasses.map((classInfo) => {
-                const colors = getStatusColor(classInfo.statistics.status);
+                const stats: any = classInfo.statistics || {};
+                const percentage = getPercentage(stats);
+                const status = getStatus(stats);
+                const colors = getStatusColor(status);
                 return (
                   <div key={classInfo.class_id} className="bg-white rounded-2xl shadow-md border border-teal-200 overflow-hidden hover:shadow-xl transition-all">
                     <div className="bg-gradient-to-r from-teal-50 to-cyan-50 p-4 md:p-6 border-b border-teal-200">
@@ -428,35 +459,35 @@ export default function StudentDashboard() {
                       <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                         <span className="text-sm text-slate-600">Attendance</span>
                         <span className={`text-lg font-bold ${colors.text}`}>
-                          {classInfo.statistics.percentage.toFixed(1)}%
+                          {percentage.toFixed(1)}%
                         </span>
                       </div>
 
                       <div className={`p-3 ${colors.bg} border ${colors.border} rounded-lg flex items-center justify-between`}>
                         <div className="flex items-center gap-2">
                           <div className={`w-2 h-2 rounded-full ${colors.dot}`}></div>
-                          <span className={`text-sm font-medium ${colors.text} capitalize`}>{classInfo.statistics.status}</span>
+                          <span className={`text-sm font-medium ${colors.text} capitalize`}>{status}</span>
                         </div>
                       </div>
 
                       <div className="grid grid-cols-3 gap-2 text-center">
                         <div className="p-2 bg-emerald-50 rounded-lg">
                           <p className="text-xs text-slate-600">Present</p>
-                          <p className="text-lg font-bold text-emerald-700">{classInfo.statistics.present}</p>
+                          <p className="text-lg font-bold text-emerald-700">{getCount(stats.present ?? stats.present_days)}</p>
                         </div>
                         <div className="p-2 bg-rose-50 rounded-lg">
                           <p className="text-xs text-slate-600">Absent</p>
-                          <p className="text-lg font-bold text-rose-700">{classInfo.statistics.absent}</p>
+                          <p className="text-lg font-bold text-rose-700">{getCount(stats.absent)}</p>
                         </div>
                         <div className="p-2 bg-amber-50 rounded-lg">
                           <p className="text-xs text-slate-600">Late</p>
-                          <p className="text-lg font-bold text-amber-700">{classInfo.statistics.late}</p>
+                          <p className="text-lg font-bold text-amber-700">{getCount(stats.late)}</p>
                         </div>
                       </div>
 
                       <div className="pt-2 border-t border-slate-200">
                         <p className="text-xs text-slate-500">
-                          Total Classes: {classInfo.statistics.total_classes}
+                          Total Classes: {getCount(stats.total_classes ?? stats.total_days)}
                         </p>
                       </div>
                     </div>
@@ -474,7 +505,7 @@ export default function StudentDashboard() {
           classes={classes.map(c => ({
             classid: c.class_id,
             classname: c.class_name,
-            teachername: c.teacher_name
+            teachername: c.teacher_name ?? 'Unknown'
           }))}
         />
       )}
