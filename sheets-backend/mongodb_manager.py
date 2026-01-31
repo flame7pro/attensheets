@@ -1339,3 +1339,69 @@ class MongoDBManager:
             {"teacher_id": user_id, "id": stored_class_id},
             {"$set": data}
         )
+
+    # ==========================================
+    # VERIFICATION CODES METHODS
+    # ==========================================
+    
+    def store_verification_code(self, email: str, code: str, data: Dict[str, Any]) -> None:
+        """
+        Store verification code in MongoDB (replaces in-memory dict)
+        
+        Args:
+            email: User's email address
+            code: 6-digit verification code
+            data: Additional data (name, password, role, device_info, etc.)
+        """
+        verification_data = {
+            "email": email,
+            "code": code,
+            "created_at": datetime.utcnow().isoformat(),
+            **data  # Include all additional fields (name, password, role, device_info, expires_at, etc.)
+        }
+        
+        # Upsert: replace if exists, insert if new
+        self.verification_codes.update_one(
+            {"email": email},
+            {"$set": verification_data},
+            upsert=True
+        )
+    
+    def get_verification_code(self, email: str) -> Optional[Dict[str, Any]]:
+        """
+        Get verification code data for an email
+        
+        Args:
+            email: User's email address
+            
+        Returns:
+            Verification code data if found, None otherwise
+        """
+        result = self.verification_codes.find_one({"email": email}, {"_id": 0})
+        return result
+    
+    def delete_verification_code(self, email: str) -> bool:
+        """
+        Delete verification code for an email
+        
+        Args:
+            email: User's email address
+            
+        Returns:
+            True if deleted, False if not found
+        """
+        result = self.verification_codes.delete_one({"email": email})
+        return result.deleted_count > 0
+    
+    def check_verification_code_exists(self, email: str) -> bool:
+        """
+        Check if a verification code exists for an email
+        
+        Args:
+            email: User's email address
+            
+        Returns:
+            True if exists, False otherwise
+        """
+        count = self.verification_codes.count_documents({"email": email})
+        return count > 0

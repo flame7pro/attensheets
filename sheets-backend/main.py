@@ -90,8 +90,8 @@ FROM_EMAIL = os.getenv("FROM_EMAIL")
 configuration = sib_api_v3_sdk.Configuration()
 configuration.api_key['api-key'] = BREVO_API_KEY
 
-# Temporary storage for verification codes (in production, use Redis or similar)
-verification_codes = {}
+# Verification codes are now stored in MongoDB instead of memory
+# This allows the app to work across server restarts and multiple instances
 password_reset_codes = {}
 
 # ==================== PYDANTIC MODELS ====================
@@ -688,12 +688,11 @@ async def signup(request: SignupRequest):
         print(f"✅ TEACHER SIGNUP: {request.email} (Code: {code})")
 
         # Store verification code (NO device info for teachers)
-        verification_codes[request.email] = {
-            "code": code,
+        db.store_verification_code(request.email, code, {
             "name": request.name,
             "password": get_password_hash(request.password),
             "expires_at": (datetime.utcnow() + timedelta(minutes=15)).isoformat()
-        }
+        })
 
         # Send verification email
         email_sent = send_verification_email(request.email, code, request.name)
@@ -715,17 +714,17 @@ async def signup(request: SignupRequest):
 async def verify_email(request: VerifyEmailRequest):
     """Verify email with code"""
     try:
-        if request.email not in verification_codes:
+        if not db.check_verification_code_exists(request.email):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No verification code found"
             )
         
-        stored_data = verification_codes[request.email]
+        stored_data = db.get_verification_code(request.email)
         expires_at = datetime.fromisoformat(stored_data["expires_at"])
         
         if datetime.utcnow() > expires_at:
-            del verification_codes[request.email]
+            db.delete_verification_code(request.email)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Verification code expired"
@@ -747,7 +746,7 @@ async def verify_email(request: VerifyEmailRequest):
         )
         
         # Clean up verification code
-        del verification_codes[request.email]
+        db.delete_verification_code(request.email)
         
         # Create access token
         access_token = create_access_token(
@@ -806,7 +805,7 @@ async def resend_verification(request: ResendVerificationRequest):
     """Resend verification code"""
     try:
         # Check if there's already a pending verification for this email
-        if request.email not in verification_codes:
+        if not db.check_verification_code_exists(request.email):
             # Check if user already exists
             existing_user = db.get_user_by_email(request.email)
             if existing_user:
@@ -821,19 +820,18 @@ async def resend_verification(request: ResendVerificationRequest):
                 )
         
         # Get the stored data
-        stored_data = verification_codes[request.email]
+        stored_data = db.get_verification_code(request.email)
         
         # Generate new code
         code = generate_verification_code()
         print(f"New verification code for {request.email}: {code}")
         
         # Update the stored verification code with new code and expiry
-        verification_codes[request.email] = {
-            "code": code,
+        db.store_verification_code(request.email, code, {
             "name": stored_data["name"],
             "password": stored_data["password"],
             "expires_at": (datetime.utcnow() + timedelta(minutes=15)).isoformat()
-        }
+        })
         
         # Send new verification email
         email_sent = send_verification_email(request.email, code, stored_data["name"])
@@ -1095,15 +1093,14 @@ async def student_signup(request: SignupRequest):
             print(f"📱 STUDENT SIGNUP: {request.email} (no device info)")
 
         # Store verification code WITH device info for students
-        verification_codes[request.email] = {
-            "code": code,
+        db.store_verification_code(request.email, code, {
             "name": request.name,
             "password": get_password_hash(request.password),
             "role": "student",
             "device_id": request.device_id if request.device_id else None,
             "device_info": request.device_info if request.device_info else None,
             "expires_at": (datetime.utcnow() + timedelta(minutes=15)).isoformat()
-        }
+        })
 
         # Send verification email
         email_sent = send_verification_email(request.email, code, request.name)
@@ -1127,13 +1124,13 @@ async def verify_student_email(request: VerifyEmailRequest):
     Verify student email and automatically trust their first device.
     """
     try:
-        if request.email not in verification_codes:
+        if not db.check_verification_code_exists(request.email):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No verification code found"
             )
 
-        stored_data = verification_codes[request.email]
+        stored_data = db.get_verification_code(request.email)
 
         # Ensure this is a student verification
         if stored_data.get("role") != "student":
@@ -1145,7 +1142,7 @@ async def verify_student_email(request: VerifyEmailRequest):
         # Check expiration
         expires_at = datetime.fromisoformat(stored_data["expires_at"])
         if datetime.utcnow() > expires_at:
-            del verification_codes[request.email]
+            db.delete_verification_code(request.email)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Verification code expired"
@@ -1174,7 +1171,7 @@ async def verify_student_email(request: VerifyEmailRequest):
             print(f"   Device: {stored_data['device_info'].get('name')}")
 
         # Clean up verification code
-        del verification_codes[request.email]
+        db.delete_verification_code(request.email)
 
         # Create access token
         access_token = create_access_token(
@@ -1542,17 +1539,17 @@ async def verify_class_exists(class_id: str):
 async def verify_email(request: VerifyEmailRequest):
     """Verify email with code - handles both teacher and student"""
     try:
-        if request.email not in verification_codes:
+        if not db.check_verification_code_exists(request.email):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No verification code found"
             )
         
-        stored_data = verification_codes[request.email]
+        stored_data = db.get_verification_code(request.email)
         expires_at = datetime.fromisoformat(stored_data["expires_at"])
         
         if datetime.utcnow() > expires_at:
-            del verification_codes[request.email]
+            db.delete_verification_code(request.email)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Verification code expired"
@@ -1586,7 +1583,7 @@ async def verify_email(request: VerifyEmailRequest):
             )
         
         # Clean up verification code
-        del verification_codes[request.email]
+        db.delete_verification_code(request.email)
         
         # Create access token with role
         access_token = create_access_token(
