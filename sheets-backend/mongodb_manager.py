@@ -1405,3 +1405,69 @@ class MongoDBManager:
         """
         count = self.verification_codes.count_documents({"email": email})
         return count > 0
+
+    # ==========================================
+    # PASSWORD RESET CODES METHODS
+    # ==========================================
+    
+    def store_password_reset_code(self, email: str, code: str, data: Dict[str, Any]) -> None:
+        """
+        Store password reset code in MongoDB (replaces in-memory dict)
+        
+        Args:
+            email: User's email address
+            code: 6-digit reset code
+            data: Additional data (user_id, expires_at, etc.)
+        """
+        reset_data = {
+            "email": email,
+            "code": code,
+            "created_at": datetime.utcnow().isoformat(),
+            **data  # Include all additional fields
+        }
+        
+        # Upsert: replace if exists, insert if new
+        self.password_reset_codes.update_one(
+            {"email": email},
+            {"$set": reset_data},
+            upsert=True
+        )
+    
+    def get_password_reset_code(self, email: str) -> Optional[Dict[str, Any]]:
+        """
+        Get password reset code data for an email
+        
+        Args:
+            email: User's email address
+            
+        Returns:
+            Password reset code data if found, None otherwise
+        """
+        result = self.password_reset_codes.find_one({"email": email}, {"_id": 0})
+        return result
+    
+    def delete_password_reset_code(self, email: str) -> bool:
+        """
+        Delete password reset code for an email
+        
+        Args:
+            email: User's email address
+            
+        Returns:
+            True if deleted, False if not found
+        """
+        result = self.password_reset_codes.delete_one({"email": email})
+        return result.deleted_count > 0
+    
+    def check_password_reset_code_exists(self, email: str) -> bool:
+        """
+        Check if a password reset code exists for an email
+        
+        Args:
+            email: User's email address
+            
+        Returns:
+            True if exists, False otherwise
+        """
+        count = self.password_reset_codes.count_documents({"email": email})
+        return count > 0

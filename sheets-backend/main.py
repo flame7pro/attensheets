@@ -861,10 +861,9 @@ async def request_password_reset(request: PasswordResetRequest):
     code = generate_verification_code()
     print(f"Password reset code for {request.email}: {code}")
     
-    password_reset_codes[request.email] = {
-        "code": code,
+    db.store_password_reset_code(request.email, code, {
         "expires_at": (datetime.utcnow() + timedelta(minutes=15)).isoformat()
-    }
+    })
     
     send_password_reset_email(request.email, code, user["name"])
     
@@ -874,17 +873,17 @@ async def request_password_reset(request: PasswordResetRequest):
 @app.post("/auth/reset-password")
 async def reset_password(request: VerifyResetCodeRequest):
     """Reset password with code"""
-    if request.email not in password_reset_codes:
+    if not db.check_password_reset_code_exists(request.email):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No reset code found"
         )
     
-    stored_data = password_reset_codes[request.email]
+    stored_data = db.get_password_reset_code(request.email)
     expires_at = datetime.fromisoformat(stored_data["expires_at"])
     
     if datetime.utcnow() > expires_at:
-        del password_reset_codes[request.email]
+        db.delete_password_reset_code(request.email)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Reset code expired"
@@ -907,7 +906,7 @@ async def reset_password(request: VerifyResetCodeRequest):
     if user:
         db.update_user(user["id"], password=get_password_hash(request.new_password))
     
-    del password_reset_codes[request.email]
+    db.delete_password_reset_code(request.email)
     
     return {"success": True, "message": "Password reset successfully"}
 
@@ -915,14 +914,14 @@ async def reset_password(request: VerifyResetCodeRequest):
 @app.post("/auth/change-password")
 async def change_password(request: ChangePasswordRequest, email: str = Depends(verify_token)):
     """Change password for logged-in user - supports both teachers and students"""
-    if email not in password_reset_codes:
+    if not db.check_password_reset_code_exists(email):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No verification code found")
     
-    stored_data = password_reset_codes[email]
+    stored_data = db.get_password_reset_code(email)
     expires_at = datetime.fromisoformat(stored_data["expires_at"])
     
     if datetime.utcnow() > expires_at:
-        del password_reset_codes[email]
+        db.delete_password_reset_code(email)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code expired")
     
     if stored_data["code"] != request.code:
@@ -935,14 +934,14 @@ async def change_password(request: ChangePasswordRequest, email: str = Depends(v
     user = db.get_user_by_email(email)
     if user:
         db.update_user(user["id"], password=get_password_hash(request.new_password))
-        del password_reset_codes[email]
+        db.delete_password_reset_code(email)
         return {"success": True, "message": "Password changed successfully"}
     
     # Try to find as student
     student = db.get_student_by_email(email)
     if student:
         db.update_student(student["id"], {"password": get_password_hash(request.new_password)})
-        del password_reset_codes[email]
+        db.delete_password_reset_code(email)
         return {"success": True, "message": "Password changed successfully"}
     
     # Not found in either
@@ -958,10 +957,9 @@ async def request_change_password(email: str = Depends(verify_token)):
         code = generate_verification_code()
         print(f"Password change code for {email}: {code}")
         
-        password_reset_codes[email] = {
-            "code": code,
+        db.store_password_reset_code(email, code, {
             "expires_at": (datetime.utcnow() + timedelta(minutes=15)).isoformat()
-        }
+        })
         
         send_password_reset_email(email, code, user["name"])
         return {"success": True, "message": "Verification code sent"}
@@ -972,10 +970,9 @@ async def request_change_password(email: str = Depends(verify_token)):
         code = generate_verification_code()
         print(f"Password change code for {email}: {code}")
         
-        password_reset_codes[email] = {
-            "code": code,
+        db.store_password_reset_code(email, code, {
             "expires_at": (datetime.utcnow() + timedelta(minutes=15)).isoformat()
-        }
+        })
         
         send_password_reset_email(email, code, student["name"])
         return {"success": True, "message": "Verification code sent"}
