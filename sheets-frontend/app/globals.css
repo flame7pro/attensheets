@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* Smooth transitions for theme changes */
+* {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* ===================================
+   Make Hover Buttons Always Visible
+   =================================== */
+
+/* Always show buttons with slight transparency */
+.opacity-0.group-hover\:opacity-100 {
+  opacity: 0.5 !important;
+  transition: opacity 0.2s ease;
+}
+
+/* Full opacity on group hover (desktop) */
+.group:hover .opacity-0.group-hover\:opacity-100 {
+  opacity: 1 !important;
+}
+
+/* Full opacity on button hover */
+.opacity-0.group-hover\:opacity-100:hover {
+  opacity: 1 !important;
+}
+
+/* On touch devices, show at higher opacity */
+@media (hover: none) {
+  .opacity-0.group-hover\:opacity-100 {
+    opacity: 0.7 !important;
+  }
+  
+  .opacity-0.group-hover\:opacity-100:active {
+    opacity: 1 !important;
+  }
+}
