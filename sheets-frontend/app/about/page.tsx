@@ -19,8 +19,8 @@ function Navigation() {
 
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center gap-8">
-          <a href="/" className="text-md font-medium text-slate-600 hover:text-emerald-600 transition-colors">Home</a>
-          <a href="/about" className="text-md font-medium text-emerald-600">About Us</a>
+          <a href="/" className="text-md font-medium text-emerald-600">Home</a>
+          <a href="/about" className="text-md font-medium text-slate-600 hover:text-emerald-600 transition-colors">About Us</a>
           <a href="/contact" className="text-md font-medium text-slate-600 hover:text-emerald-600 transition-colors">Contact</a>
           <a href="/auth" className="px-6 py-2.5 bg-emerald-600 text-white text-md font-medium rounded-lg hover:bg-emerald-700 hover:shadow-lg transition-all">Sign Up</a>
         </div>
@@ -39,8 +39,8 @@ function Navigation() {
       {isMenuOpen && (
         <div className="md:hidden border-t border-emerald-200/60 bg-white/95 backdrop-blur-xl">
           <div className="px-4 py-4 flex flex-col gap-3">
-            <a href="/" className="text-md font-medium text-slate-600 hover:text-emerald-600 transition-colors py-2" onClick={() => setIsMenuOpen(false)}>Home</a>
-            <a href="/about" className="text-md font-medium text-emerald-600 py-2" onClick={() => setIsMenuOpen(false)}>About Us</a>
+            <a href="/" className="text-md font-medium text-emerald-600 py-2" onClick={() => setIsMenuOpen(false)}>Home</a>
+            <a href="/about" className="text-md font-medium text-slate-600 hover:text-emerald-600 transition-colors py-2" onClick={() => setIsMenuOpen(false)}>About Us</a>
             <a href="/contact" className="text-md font-medium text-slate-600 hover:text-emerald-600 transition-colors py-2" onClick={() => setIsMenuOpen(false)}>Contact</a>
             <a href="/auth" className="px-6 py-3 bg-emerald-600 text-white text-md font-medium rounded-lg hover:bg-emerald-700 text-center mt-2" onClick={() => setIsMenuOpen(false)}>Sign Up</a>
           </div>
