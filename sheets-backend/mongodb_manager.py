@@ -167,6 +167,47 @@ class MongoDBManager:
 
         return sorted(list(students or []), key=key_fn)
 
+    def get_current_session_number_for_date(self, class_data: dict, date: str) -> int:
+        """
+        Calculate what the next session number should be based on existing attendance.
+        
+        Logic:
+        - Look at all students' attendance for this date
+        - Find the maximum number of sessions already marked
+        - Return max_sessions + 1
+        - If no sessions exist, return 1
+        """
+        max_sessions = 0
+        
+        students = class_data.get("students", [])
+        
+        for student in students:
+            attendance = student.get("attendance", {})
+            day_data = attendance.get(date)
+            
+            if not day_data:
+                continue
+            
+            # Count sessions for this student on this date
+            session_count = 0
+            
+            if isinstance(day_data, dict) and "sessions" in day_data:
+                # NEW FORMAT: { sessions: [...], updated_at: "..." }
+                session_count = len([s for s in day_data["sessions"] if s.get("status")])
+            elif isinstance(day_data, dict) and "status" in day_data:
+                # OLD FORMAT: { status: 'P', count: 2 }
+                session_count = day_data.get("count", 1)
+            elif isinstance(day_data, str):
+                # VERY OLD FORMAT: 'P' | 'A' | 'L'
+                session_count = 1
+            
+            # Track the maximum across all students
+            max_sessions = max(max_sessions, session_count)
+        
+        # Next session number is max + 1 (or 1 if no sessions exist)
+        return max_sessions + 1
+
+
     # ==================== USER OPERATIONS ====================
     
     def create_user(self, user_id: str, email: str, name: str, password_hash: str) -> Dict[str, Any]:
@@ -869,38 +910,44 @@ class MongoDBManager:
         return f"qr_{class_id}_{date}"
     
     def start_qr_session(self, class_id: str, teacher_id: str, date: str, rotation_interval: int = 5) -> Dict[str, Any]:
-        """Start a QR attendance session"""
+        """Start QR session - session number based on CURRENT attendance state"""
         import random
         import string
-
+    
+        print(f"\n[DB] Starting QR session for class {class_id}, date {date}")
+        
         rel_class_id = self._class_rel_id(class_id)
         class_id_variants = self._class_id_variants(class_id)
-
-        # Check for existing active session (handle old numeric class_id values too)
+    
+        # Check for existing active session
         existing_session = self.qr_sessions.find_one({
             "class_id": {"$in": class_id_variants},
             "date": date,
             "status": "active"
         }, {"_id": 0})
-
+    
         if existing_session:
             raise ValueError("An active QR session already exists for this date")
-
+    
+        # Get class data
+        class_data = self.get_class_by_id(class_id)
+        if not class_data:
+            raise ValueError("Class not found")
+    
+        if class_data.get("teacher_id") != teacher_id:
+            raise ValueError("Unauthorized")
+    
+        # ✅ FIX: Calculate session number from CURRENT state
+        session_number = self.get_current_session_number_for_date(class_data, date)
+        
+        print(f"[DB] Calculated session number: {session_number}")
+        print(f"[DB] (Based on existing attendance for {date})")
+    
         # Generate QR code
         qr_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-
-        # Determine session number
-        previous_sessions = list(self.qr_sessions.find({
-            "class_id": {"$in": class_id_variants},
-            "date": date
-        }).sort("session_number", DESCENDING).limit(1))
-
-        session_number = 1
-        if previous_sessions:
-            session_number = previous_sessions[0].get("session_number", 0) + 1
-
+    
         now_iso = datetime.utcnow().isoformat()
-
+    
         # Store class_id as STRING for cross-device consistency
         session_data = {
             "class_id": rel_class_id,
@@ -909,19 +956,19 @@ class MongoDBManager:
             "status": "active",
             "current_code": qr_code,
             "rotation_interval": int(rotation_interval) if rotation_interval is not None else 5,
-            "session_number": session_number,
+            "session_number": session_number,  # ✅ Dynamic based on current state
             "scanned_students": [],
             "started_at": now_iso,
-            # keep both keys for compatibility
             "last_rotation": now_iso,
             "code_generated_at": now_iso
         }
-
+    
         self.qr_sessions.insert_one(session_data.copy())
         session_data.pop('_id', None)
-
+    
+        print(f"[DB] ✅ QR session started (Session #{session_number})")
         return session_data
-
+        
     def _maybe_rotate_qr_session(self, session: Dict[str, Any]) -> Dict[str, Any]:
         """Rotate current_code if the rotation interval has elapsed."""
         import random
