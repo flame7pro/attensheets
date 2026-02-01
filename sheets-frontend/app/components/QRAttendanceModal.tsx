@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, QrCode, Users, Clock, Zap, CheckCircle, Calendar } from 'lucide-react';
 import QRCode from 'qrcode';
 
@@ -23,17 +23,48 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
     const [rotationInterval, setRotationInterval] = useState<number>(5);
     const [isActive, setIsActive] = useState<boolean>(false);
     const [isStopping, setIsStopping] = useState<boolean>(false);
-    const [timeLeft, setTimeLeft] = useState(rotationInterval);
+    const [timeLeft, setTimeLeft] = useState(5);
     const [sessionNumber, setSessionNumber] = useState<number>(1);
-    const [lastRotationAt, setLastRotationAt] = useState<string | null>(null);
     const [notification, setNotification] = useState<{
         type: 'success' | 'error' | 'info';
         message: string;
     } | null>(null);
 
+    // Use refs to track the actual rotation timestamp from server
+    const lastRotationTimestamp = useRef<number>(0);
+    const rotationIntervalRef = useRef<number>(5);
+
     const showNotification = (type: 'success' | 'error' | 'info', message: string) => {
         setNotification({ type, message });
         setTimeout(() => setNotification(null), 5000);
+    };
+
+    const parseServerTime = (isoString: string): number => {
+        try {
+            // Handle both "2026-01-01T00:00:00.000" and "...Z" formats
+            const cleanString = isoString.endsWith('Z') ? isoString.slice(0, -1) : isoString;
+            const date = new Date(cleanString);
+            return date.getTime();
+        } catch {
+            return Date.now();
+        }
+    };
+
+    const generateQRCode = async (code: string) => {
+        const qrData = {
+            class_id: String(classId),
+            date: currentDate,
+            code: code,
+        };
+
+        const qrDataString = JSON.stringify(qrData);
+        const url = await QRCode.toDataURL(qrDataString, {
+            width: 300,
+            margin: 2,
+            color: { dark: '#059669', light: '#ffffff' },
+        });
+
+        setQrCodeUrl(url);
     };
 
     const startSession = async () => {
@@ -70,37 +101,23 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             const data = await response.json();
             console.log('[QR MODAL] Session started:', data);
 
-            const serverInterval = Number(data?.session?.rotation_interval ?? rotationInterval);
-            const serverLastRotation =
-                data?.session?.last_rotation ?? data?.session?.code_generated_at ?? data?.session?.started_at ?? null;
+            const session = data.session;
+            const serverInterval = Number(session.rotation_interval ?? rotationInterval);
+            const serverLastRotation = session.last_rotation ?? session.code_generated_at ?? session.started_at;
+
+            // Set the baseline rotation timestamp
+            lastRotationTimestamp.current = parseServerTime(serverLastRotation);
+            rotationIntervalRef.current = serverInterval;
 
             setIsActive(true);
-            setRotationInterval(Number.isFinite(serverInterval) ? serverInterval : rotationInterval);
-            setLastRotationAt(serverLastRotation);
-            setCurrentCode(data.session.current_code);
-            setScannedCount(data.session.scanned_students?.length ?? 0);
-            setSessionNumber(data.session.session_number || 1);
+            setRotationInterval(serverInterval);
+            setCurrentCode(session.current_code);
+            setScannedCount(session.scanned_students?.length ?? 0);
+            setSessionNumber(session.session_number || 1);
+            setTimeLeft(serverInterval);
 
-            // This will be kept in sync by the countdown effect below, but set an initial value.
-            setTimeLeft(Number.isFinite(serverInterval) ? serverInterval : rotationInterval);
-
-            const qrData = {
-                class_id: String(classId),
-                date: currentDate,
-                code: data.session.current_code,
-            };
-
-            const qrDataString = JSON.stringify(qrData);
-            console.log('[QR MODAL] QR Data:', qrDataString);
-
-            const url = await QRCode.toDataURL(qrDataString, {
-                width: 300,
-                margin: 2,
-                color: { dark: '#059669', light: '#ffffff' },
-            });
-
-            setQrCodeUrl(url);
-            showNotification('success', `Session ${data.session.session_number} started!`);
+            await generateQRCode(session.current_code);
+            showNotification('success', `Session ${session.session_number} started!`);
         } catch (err: unknown) {
             console.error('[QR MODAL] Start session error:', err);
             const message = err instanceof Error ? err.message : 'Error starting QR session';
@@ -108,11 +125,11 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         }
     };
 
-    // Poll for session updates - CHECK EVERY SECOND for code changes
+    // Poll for session updates every second
     useEffect(() => {
         if (!isActive) return;
 
-        const interval = setInterval(async () => {
+        const pollInterval = setInterval(async () => {
             try {
                 const token = localStorage.getItem('access_token');
                 if (!token) return;
@@ -131,78 +148,56 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 if (!data.active || !data.session) return;
 
                 const session = data.session;
+                
+                // Update stats
                 setScannedCount(session.scanned_students?.length ?? 0);
                 setSessionNumber(session.session_number || 1);
 
+                // Check if code changed (server rotated)
+                const newCode = session.current_code;
+                if (newCode && newCode !== currentCode) {
+                    console.log('[QR MODAL] 🔄 Code rotated to:', newCode);
+                    
+                    // Update rotation timestamp
+                    const serverLastRotation = session.last_rotation ?? session.code_generated_at ?? session.started_at;
+                    lastRotationTimestamp.current = parseServerTime(serverLastRotation);
+                    
+                    setCurrentCode(newCode);
+                    await generateQRCode(newCode);
+                    showNotification('info', 'QR Code refreshed!');
+                }
+
+                // Update interval if changed
                 const serverInterval = Number(session.rotation_interval ?? rotationInterval);
-                if (Number.isFinite(serverInterval) && serverInterval !== rotationInterval) {
+                if (serverInterval !== rotationIntervalRef.current) {
+                    rotationIntervalRef.current = serverInterval;
                     setRotationInterval(serverInterval);
                 }
 
-                const serverLastRotation = session.last_rotation ?? session.code_generated_at ?? session.started_at ?? null;
-                
-                // 🔥 KEY FIX: Update lastRotationAt when it changes to trigger countdown reset
-                if (serverLastRotation && serverLastRotation !== lastRotationAt) {
-                    console.log('[QR MODAL] ⏰ Rotation timestamp updated:', serverLastRotation);
-                    setLastRotationAt(serverLastRotation);
-                }
-
-                // Always sync the code from the server; regenerate QR image if it changed
-                const newCode = session.current_code;
-                if (typeof newCode === 'string' && newCode && newCode !== currentCode) {
-                    console.log('[QR MODAL] 🔄 Code rotated:', newCode);
-                    setCurrentCode(newCode);
-
-                    const qrData = {
-                        class_id: String(classId),
-                        date: currentDate,
-                        code: newCode,
-                    };
-
-                    const qrDataString = JSON.stringify(qrData);
-                    const url = await QRCode.toDataURL(qrDataString, {
-                        width: 300,
-                        margin: 2,
-                        color: { dark: '#059669', light: '#ffffff' },
-                    });
-
-                    setQrCodeUrl(url);
-                    showNotification('info', 'QR Code refreshed!');
-                }
             } catch (e: unknown) {
                 console.error('[QR MODAL] Poll error', e);
             }
-        }, 1000); // Poll every second to catch changes quickly
+        }, 1000);
 
-        return () => clearInterval(interval);
-    }, [isActive, classId, currentCode, rotationInterval, currentDate, lastRotationAt]);
+        return () => clearInterval(pollInterval);
+    }, [isActive, classId, currentDate, currentCode, rotationInterval]);
 
-    // Countdown timer (computed from last rotation time to stay accurate)
+    // Countdown timer - runs independently based on server rotation timestamp
     useEffect(() => {
-        if (!isActive || !lastRotationAt) return;
+        if (!isActive) return;
 
-        const parseIso = (value: string) => {
-            // Handle both "2026-01-01T00:00:00.000" and "...Z"
-            const v = value.endsWith('Z') ? value.slice(0, -1) : value;
-            const d = new Date(v);
-            return Number.isNaN(d.getTime()) ? null : d;
-        };
+        const countdownInterval = setInterval(() => {
+            const now = Date.now();
+            const elapsed = Math.floor((now - lastRotationTimestamp.current) / 1000);
+            const remaining = rotationIntervalRef.current - (elapsed % rotationIntervalRef.current);
+            
+            // Ensure we never show 0 or negative
+            const displayTime = remaining <= 0 ? rotationIntervalRef.current : remaining;
+            setTimeLeft(displayTime);
+        }, 100); // Update 10 times per second for smooth display
 
-        // Update countdown more frequently (every 100ms) for smoother display
-        const t = setInterval(() => {
-            const last = parseIso(lastRotationAt);
-            if (!last || !Number.isFinite(rotationInterval) || rotationInterval <= 0) {
-                setTimeLeft(rotationInterval);
-                return;
-            }
-
-            const elapsedSeconds = Math.floor((Date.now() - last.getTime()) / 1000);
-            const left = rotationInterval - (elapsedSeconds % rotationInterval);
-            setTimeLeft(left <= 0 ? rotationInterval : left);
-        }, 100); // Update 10 times per second for smooth countdown
-
-        return () => clearInterval(t);
-    }, [isActive, rotationInterval, lastRotationAt]);
+        return () => clearInterval(countdownInterval);
+    }, [isActive]);
 
     const stopSession = async () => {
         setIsStopping(true);
@@ -433,7 +428,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                             {/* QR Code Display */}
                             <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-8 text-center border-2 border-emerald-200">
                                 <div className="bg-white p-4 sm:p-6 rounded-xl sm:rounded-2xl inline-block shadow-lg">
-                                    <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 mx-auto" />
+                                    {qrCodeUrl && <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 mx-auto" />}
                                 </div>
                             </div>
 
