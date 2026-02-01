@@ -460,7 +460,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     ) : (
                         <div className="space-y-4">
                             <div className="w-full max-w-md mx-auto relative">
-                                <div className="relative aspect-square bg-black rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
+                                <div className="relative aspect-square rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
                                     <div id="qr-reader" className="absolute inset-0" />
                                     
                                     {/* Success/Error Overlay */}
