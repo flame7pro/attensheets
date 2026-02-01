@@ -33,119 +33,109 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
         setProcessing(false);
     }, []);
 
-    const onScanSuccess = useCallback((decodedText: string) => {
+    const onScanSuccess = useCallback(async (decodedText: string) => {
         if (processing || isCleaningUpRef.current) return;
         setProcessing(true);
     
         console.log('[STUDENT SCANNER] ='.repeat(30));
         console.log('[STUDENT SCANNER] QR Code Scanned (RAW):', decodedText);
     
-        // Parse and validate QR data first
-        let qrData: { class_id: string; date: string; code: string };
-        
         try {
-            qrData = JSON.parse(decodedText);
-            console.log('[STUDENT SCANNER] ✅ Parsed QR data:', qrData);
-        } catch (parseError) {
-            console.error('[STUDENT SCANNER] ❌ Failed to parse QR code:', parseError);
-            setResult({
-                success: false,
-                message: 'Invalid QR code format',
+            let qrData: { class_id: string; date: string; code: string };
+    
+            try {
+                qrData = JSON.parse(decodedText);
+                console.log('[STUDENT SCANNER] ✅ Parsed QR data:', qrData);
+            } catch (parseError) {
+                console.error('[STUDENT SCANNER] ❌ Failed to parse QR code:', parseError);
+                setResult({
+                    success: false,
+                    message: 'Invalid QR code format',
+                });
+                setProcessing(false);
+                return;
+            }
+    
+            if (!qrData.class_id || !qrData.date || !qrData.code) {
+                console.error('[STUDENT SCANNER] ❌ Missing required fields');
+                setResult({
+                    success: false,
+                    message: 'Invalid QR code - missing required data',
+                });
+                setProcessing(false);
+                return;
+            }
+    
+            if (qrData.class_id !== selectedClass) {
+                console.error('[STUDENT SCANNER] ❌ Class mismatch');
+                setResult({
+                    success: false,
+                    message: 'This QR code is for a different class!',
+                });
+                setProcessing(false);
+                return;
+            }
+    
+            const token = typeof window !== 'undefined'
+                ? localStorage.getItem('access_token')
+                : null;
+    
+            if (!token) {
+                console.error('[STUDENT SCANNER] ❌ No token found');
+                setResult({
+                    success: false,
+                    message: 'Please login again.',
+                });
+                setProcessing(false);
+                return;
+            }
+    
+            console.log('[STUDENT SCANNER] 📤 Sending to backend...');
+    
+            const qrCodeString = decodedText;
+            const url = `${process.env.NEXT_PUBLIC_API_URL}/qr/scan?class_id=${qrData.class_id}&qr_code=${encodeURIComponent(qrCodeString)}`;
+    
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
             });
-            setProcessing(false);
-            return;
-        }
     
-        if (!qrData.class_id || !qrData.date || !qrData.code) {
-            console.error('[STUDENT SCANNER] ❌ Missing required fields');
-            setResult({
-                success: false,
-                message: 'Invalid QR code - missing required data',
-            });
-            setProcessing(false);
-            return;
-        }
-    
-        if (qrData.class_id !== selectedClass) {
-            console.error('[STUDENT SCANNER] ❌ Class mismatch');
-            setResult({
-                success: false,
-                message: 'This QR code is for a different class!',
-            });
-            setProcessing(false);
-            return;
-        }
-    
-        const token = typeof window !== 'undefined'
-            ? localStorage.getItem('access_token')
-            : null;
-    
-        if (!token) {
-            console.error('[STUDENT SCANNER] ❌ No token found');
-            setResult({
-                success: false,
-                message: 'Please login again.',
-            });
-            setProcessing(false);
-            return;
-        }
-    
-        // Stop scanner immediately to prevent multiple scans
-        if (html5QrRef.current) {
-            html5QrRef.current.stop().catch(() => {});
-        }
-    
-        console.log('[STUDENT SCANNER] 📤 Sending to backend...');
-    
-        const qrCodeString = decodedText;
-        const url = `${process.env.NEXT_PUBLIC_API_URL}/qr/scan?class_id=${qrData.class_id}&qr_code=${encodeURIComponent(qrCodeString)}`;
-    
-        // Make the API call without awaiting in the callback
-        fetch(url, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-        })
-        .then(response => response.json().then(data => ({ status: response.ok, data })))
-        .then(({ status, data }) => {
+            const data = await response.json();
             console.log('[STUDENT SCANNER] 📥 Response:', data);
     
-            if (!status) {
+            if (!response.ok) {
                 throw new Error(data.detail || 'Failed to mark attendance');
             }
     
             console.log('[STUDENT SCANNER] ✅ SUCCESS!');
             
-            // Schedule state updates to avoid transition errors
-            requestAnimationFrame(() => {
-                setResult({ success: true, message: data.message || 'Attendance marked successfully!' });
+            // Set success result
+            setResult({ success: true, message: data.message || 'Attendance marked successfully!' });
+            
+            // Stop scanning after a brief delay to let UI update
+            setTimeout(() => {
                 setScanning(false);
                 setProcessing(false);
-            });
-    
-            // Close modal after delay
+            }, 100);
+            
+            // Close modal after showing success
             setTimeout(() => {
-                requestAnimationFrame(() => {
-                    onClose();
-                });
-            }, 2500);
-        })
-        .catch((error: any) => {
-            console.error('[STUDENT SCANNER] ❌ Error:', error);
-            requestAnimationFrame(() => {
-                setResult({
-                    success: false,
-                    message: error.message || 'Failed to scan QR code',
-                });
-                setProcessing(false);
-            });
-        })
-        .finally(() => {
-            console.log('[STUDENT SCANNER] ='.repeat(30));
-        });
+                onClose();
+            }, 3000);
     
+        } catch (error: any) {
+            console.error('[STUDENT SCANNER] ❌ Error:', error);
+            setResult({
+                success: false,
+                message: error.message || 'Failed to scan QR code',
+            });
+            setProcessing(false);
+        } finally {
+            console.log('[STUDENT SCANNER] ='.repeat(30));
+        }
     }, [processing, selectedClass, onClose]);
     
     const onScanFailure = useCallback((_error: string) => {
