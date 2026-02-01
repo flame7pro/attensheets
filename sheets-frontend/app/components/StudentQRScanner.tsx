@@ -115,12 +115,12 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
             // Show success message (camera stays on)
             setResult({ success: true, message: data.message || 'Attendance marked successfully!' });
             
-            // Close everything smoothly after 2 seconds
+            // Close everything smoothly after 2.5 seconds
             setTimeout(() => {
                 setScanning(false);
                 setProcessing(false);
                 onClose();
-            }, 2000);
+            }, 2500);
 
         } catch (error: any) {
             console.error('[STUDENT SCANNER] ❌ Error:', error);
@@ -463,23 +463,66 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                                 <div className="relative aspect-square rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
                                     <div id="qr-reader" className="absolute inset-0" />
                                     
-                                    {/* Success/Error Overlay */}
+                                    {/* Enhanced Success/Error Overlay with Animation */}
                                     {result && (
-                                        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-10 p-4">
-                                            <div className={`rounded-xl p-4 md:p-6 border-2 ${result.success ? 'bg-emerald-50 border-emerald-500' : 'bg-rose-50 border-rose-500'} max-w-sm w-full`}>
-                                                <div className="flex flex-col items-center gap-3 text-center">
-                                                    {result.success ? (
-                                                        <CheckCircle className="w-12 h-12 md:w-16 md:h-16 text-emerald-600" />
-                                                    ) : (
-                                                        <AlertCircle className="w-12 h-12 md:w-16 md:h-16 text-rose-600" />
-                                                    )}
-                                                    <div>
-                                                        <p className={`font-bold text-lg md:text-xl mb-1 ${result.success ? 'text-emerald-900' : 'text-rose-900'}`}>
-                                                            {result.success ? 'Success!' : 'Error'}
+                                        <div className="absolute inset-0 bg-gradient-to-br from-black/80 via-black/70 to-black/80 backdrop-blur-md flex items-center justify-center z-10 p-4 animate-fadeIn">
+                                            <div className={`
+                                                relative rounded-2xl p-6 md:p-8 shadow-2xl max-w-sm w-full
+                                                ${result.success 
+                                                    ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-2 border-emerald-400' 
+                                                    : 'bg-gradient-to-br from-rose-50 to-red-50 border-2 border-rose-400'
+                                                }
+                                                transform transition-all duration-300 ease-out
+                                                animate-scaleIn
+                                            `}>
+                                                {/* Decorative corner elements */}
+                                                <div className={`absolute top-0 left-0 w-16 h-16 ${result.success ? 'bg-emerald-200/30' : 'bg-rose-200/30'} rounded-br-full`} />
+                                                <div className={`absolute bottom-0 right-0 w-16 h-16 ${result.success ? 'bg-emerald-200/30' : 'bg-rose-200/30'} rounded-tl-full`} />
+                                                
+                                                <div className="relative flex flex-col items-center gap-4 text-center">
+                                                    {/* Animated Icon with Pulse Effect */}
+                                                    <div className={`
+                                                        relative
+                                                        ${result.success ? 'animate-successPulse' : 'animate-shake'}
+                                                    `}>
+                                                        {result.success ? (
+                                                            <div className="relative">
+                                                                {/* Glow effect */}
+                                                                <div className="absolute inset-0 bg-emerald-400/30 rounded-full blur-xl animate-pulse" />
+                                                                <CheckCircle className="relative w-16 h-16 md:w-20 md:h-20 text-emerald-600 drop-shadow-lg" strokeWidth={2.5} />
+                                                            </div>
+                                                        ) : (
+                                                            <div className="relative">
+                                                                <div className="absolute inset-0 bg-rose-400/30 rounded-full blur-xl animate-pulse" />
+                                                                <AlertCircle className="relative w-16 h-16 md:w-20 md:h-20 text-rose-600 drop-shadow-lg" strokeWidth={2.5} />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    {/* Text Content */}
+                                                    <div className="space-y-2">
+                                                        <p className={`
+                                                            font-black text-2xl md:text-3xl tracking-tight
+                                                            ${result.success ? 'text-emerald-900' : 'text-rose-900'}
+                                                        `}>
+                                                            {result.success ? '✓ Success!' : '✕ Error'}
                                                         </p>
-                                                        <p className={`text-sm md:text-base ${result.success ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                                        <p className={`
+                                                            text-sm md:text-base font-medium leading-relaxed
+                                                            ${result.success ? 'text-emerald-800' : 'text-rose-800'}
+                                                        `}>
                                                             {result.message}
                                                         </p>
+                                                        
+                                                        {/* Progress indicator for success */}
+                                                        {result.success && (
+                                                            <div className="mt-4 space-y-2">
+                                                                <p className="text-xs text-emerald-700/80">Closing automatically...</p>
+                                                                <div className="w-full bg-emerald-200 rounded-full h-1.5 overflow-hidden">
+                                                                    <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full animate-progressBar" />
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -502,6 +545,76 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                                 }
                                 #qr-reader__scan_region {
                                     min-height: 100% !important;
+                                }
+                                
+                                @keyframes fadeIn {
+                                    from {
+                                        opacity: 0;
+                                    }
+                                    to {
+                                        opacity: 1;
+                                    }
+                                }
+                                
+                                @keyframes scaleIn {
+                                    from {
+                                        transform: scale(0.8);
+                                        opacity: 0;
+                                    }
+                                    to {
+                                        transform: scale(1);
+                                        opacity: 1;
+                                    }
+                                }
+                                
+                                @keyframes successPulse {
+                                    0%, 100% {
+                                        transform: scale(1);
+                                    }
+                                    50% {
+                                        transform: scale(1.1);
+                                    }
+                                }
+                                
+                                @keyframes shake {
+                                    0%, 100% {
+                                        transform: translateX(0);
+                                    }
+                                    25% {
+                                        transform: translateX(-10px);
+                                    }
+                                    75% {
+                                        transform: translateX(10px);
+                                    }
+                                }
+                                
+                                @keyframes progressBar {
+                                    from {
+                                        width: 0%;
+                                    }
+                                    to {
+                                        width: 100%;
+                                    }
+                                }
+                                
+                                .animate-fadeIn {
+                                    animation: fadeIn 0.3s ease-out;
+                                }
+                                
+                                .animate-scaleIn {
+                                    animation: scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+                                }
+                                
+                                .animate-successPulse {
+                                    animation: successPulse 0.6s ease-in-out;
+                                }
+                                
+                                .animate-shake {
+                                    animation: shake 0.5s ease-in-out;
+                                }
+                                
+                                .animate-progressBar {
+                                    animation: progressBar 2.5s linear forwards;
                                 }
                             `}</style>
 
