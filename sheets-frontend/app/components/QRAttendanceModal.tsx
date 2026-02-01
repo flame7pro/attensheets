@@ -108,7 +108,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         }
     };
 
-    // Poll for session updates
+    // Poll for session updates - CHECK EVERY SECOND for code changes
     useEffect(() => {
         if (!isActive) return;
 
@@ -140,14 +140,17 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 }
 
                 const serverLastRotation = session.last_rotation ?? session.code_generated_at ?? session.started_at ?? null;
-                if (serverLastRotation) {
+                
+                // 🔥 KEY FIX: Update lastRotationAt when it changes to trigger countdown reset
+                if (serverLastRotation && serverLastRotation !== lastRotationAt) {
+                    console.log('[QR MODAL] ⏰ Rotation timestamp updated:', serverLastRotation);
                     setLastRotationAt(serverLastRotation);
                 }
 
-                // Always sync the code from the server; only regenerate the QR image if it changed.
+                // Always sync the code from the server; regenerate QR image if it changed
                 const newCode = session.current_code;
                 if (typeof newCode === 'string' && newCode && newCode !== currentCode) {
-                    console.log('[QR MODAL] Code rotated:', newCode);
+                    console.log('[QR MODAL] 🔄 Code rotated:', newCode);
                     setCurrentCode(newCode);
 
                     const qrData = {
@@ -164,16 +167,17 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                     });
 
                     setQrCodeUrl(url);
+                    showNotification('info', 'QR Code refreshed!');
                 }
             } catch (e: unknown) {
                 console.error('[QR MODAL] Poll error', e);
             }
-        }, 1000);
+        }, 1000); // Poll every second to catch changes quickly
 
         return () => clearInterval(interval);
-    }, [isActive, classId, currentCode, rotationInterval, currentDate]);
+    }, [isActive, classId, currentCode, rotationInterval, currentDate, lastRotationAt]);
 
-    // Countdown timer (computed from last rotation time to stay accurate even if timers are throttled)
+    // Countdown timer (computed from last rotation time to stay accurate)
     useEffect(() => {
         if (!isActive || !lastRotationAt) return;
 
@@ -184,6 +188,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             return Number.isNaN(d.getTime()) ? null : d;
         };
 
+        // Update countdown more frequently (every 100ms) for smoother display
         const t = setInterval(() => {
             const last = parseIso(lastRotationAt);
             if (!last || !Number.isFinite(rotationInterval) || rotationInterval <= 0) {
@@ -194,7 +199,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             const elapsedSeconds = Math.floor((Date.now() - last.getTime()) / 1000);
             const left = rotationInterval - (elapsedSeconds % rotationInterval);
             setTimeLeft(left <= 0 ? rotationInterval : left);
-        }, 500);
+        }, 100); // Update 10 times per second for smooth countdown
 
         return () => clearInterval(t);
     }, [isActive, rotationInterval, lastRotationAt]);
@@ -249,17 +254,11 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">
             <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-[95vw] sm:max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 sm:px-6 py-3 sm:py-5 flex items-center justify-between flex-shrink-0">
-                    <div className="flex-1 min-w-0">
+                <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 sm:px-6 py-3 sm:py-5 flex-shrink-0">
+                    <div className="flex-1">
                         <h2 className="text-lg sm:text-2xl font-bold text-white">QR Code Attendance</h2>
                         <p className="text-emerald-50 text-xs sm:text-sm mt-0.5 sm:mt-1 truncate">{className}</p>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 hover:bg-emerald-700 rounded-lg transition-colors cursor-pointer flex-shrink-0 ml-2"
-                    >
-                        <X className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                    </button>
                 </div>
 
                 {/* Date Display */}
