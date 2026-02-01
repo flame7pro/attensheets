@@ -27,67 +27,76 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
     const html5QrRef = useRef<Html5Qrcode | null>(null);
 
     useEffect(() => {
-        const setupScanner = async () => {
-            if (!scanning) return;
+    const setupScanner = async () => {
+        if (!scanning) return;
 
-            try {
-                const regionId = 'qr-reader';
-                const elem = document.getElementById(regionId);
-                if (!elem) return;
+        try {
+            const regionId = 'qr-reader';
+            const elem = document.getElementById(regionId);
+            if (!elem) return;
 
-                // Request permissions explicitly first (better errors on iOS/Safari)
-                await navigator.mediaDevices.getUserMedia({ video: true });
+            // REMOVE this early permission request - let html5-qrcode handle it
+            // await navigator.mediaDevices.getUserMedia({ video: true });
 
-                if (!html5QrRef.current) {
-                    html5QrRef.current = new Html5Qrcode(regionId);
-                }
+            if (!html5QrRef.current) {
+                html5QrRef.current = new Html5Qrcode(regionId);
+            }
 
-                // Cross-device configuration
-                const config = {
-                    fps: 10,
-                    qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-                        // Make the scan box larger so the corner markers appear more separated.
-                        // Keep it capped so it fits nicely on small phones.
-                        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-                        const size = Math.max(220, Math.min(360, Math.floor(minEdge * 0.78)));
-                        return { width: size, height: size };
-                    },
-                    aspectRatio: 1.0,
-                };
+            const config = {
+                fps: 10,
+                qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+                    const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                    const size = Math.max(220, Math.min(360, Math.floor(minEdge * 0.78)));
+                    return { width: size, height: size };
+                },
+                aspectRatio: 1.0,
+            };
 
-                const startWith = async (
-                    cameraIdOrConstraints: string | MediaTrackConstraints
-                ) => {
-                    if (!html5QrRef.current) return;
-                    await html5QrRef.current.start(
-                        cameraIdOrConstraints,
-                        config,
-                        onScanSuccess,
-                        onScanFailure
-                    );
-                };
+            const startWith = async (
+                cameraIdOrConstraints: string | MediaTrackConstraints
+            ) => {
+                if (!html5QrRef.current) return;
+                await html5QrRef.current.start(
+                    cameraIdOrConstraints,
+                    config,
+                    onScanSuccess,
+                    onScanFailure
+                );
+            };
 
-                // Prefer selecting a camera by ID string (this is what html5-qrcode officially supports).
-                // Passing a MediaTrackConstraints object with deviceId can trigger validation errors.
-                let cameras: Array<{ id: string; label: string }> = [];
+            // Strategy: Try facingMode FIRST on mobile (most reliable)
+            // Detecting mobile more reliably
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+            if (isMobile) {
+                // On mobile, facingMode is most reliable
                 try {
-                    cameras = await Html5Qrcode.getCameras();
-                } catch {
-                    cameras = [];
+                    console.log('[SCANNER] Mobile detected, trying environment camera');
+                    await startWith({ facingMode: { ideal: 'environment' } });
+                    return;
+                } catch (e) {
+                    console.warn('[SCANNER] Environment camera failed, trying getCameras:', e);
                 }
+            }
 
+            // Desktop or mobile fallback: try to enumerate cameras
+            let cameras: Array<{ id: string; label: string }> = [];
+            try {
+                cameras = await Html5Qrcode.getCameras();
+                console.log('[SCANNER] Available cameras:', cameras);
+            } catch (e) {
+                console.warn('[SCANNER] getCameras failed:', e);
+                cameras = [];
+            }
+
+            if (cameras.length > 0) {
                 const pickBestCameraId = () => {
-                    if (!cameras.length) return null;
-
                     const scored = cameras.map((c, idx) => {
                         const label = (c.label || '').toLowerCase();
                         let score = 0;
 
-                        // Prefer rear/back cameras (common on mobiles/tablets)
                         if (label.includes('back') || label.includes('rear') || label.includes('environment')) score += 100;
-                        // Avoid common virtual cams if possible
                         if (label.includes('virtual') || label.includes('obs') || label.includes('manycam')) score -= 50;
-                        // Slightly prefer later cameras
                         score += idx;
 
                         return { id: c.id, score };
@@ -98,59 +107,55 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 };
 
                 const bestId = pickBestCameraId();
-
-                // 1) Try explicit camera ID (best for laptops/tablets with multiple cameras)
                 if (bestId) {
                     try {
+                        console.log('[SCANNER] Trying camera ID:', bestId);
                         await startWith(bestId);
                         return;
                     } catch (e) {
-                        console.warn('[SCANNER] cameraId start failed, falling back:', e);
+                        console.warn('[SCANNER] Camera ID failed:', e);
                     }
                 }
-
-                // 2) Fallback to facingMode environment
-                try {
-                    await startWith({ facingMode: 'environment' });
-                    return;
-                } catch (e) {
-                    console.warn('[SCANNER] environment camera start failed, trying user camera:', e);
-                }
-
-                // 3) Final fallback: user camera
-                await startWith({ facingMode: 'user' });
-            } catch (err: unknown) {
-                console.error('[SCANNER] Initialization failed:', err);
-                setResult({
-                    success: false,
-                    message: 'Camera access denied or not found. Please ensure permissions are enabled.',
-                });
-                setScanning(false);
             }
-        };
 
-        setupScanner();
+            // Final fallback: try environment, then user
+            try {
+                await startWith({ facingMode: 'environment' });
+                return;
+            } catch (e) {
+                console.warn('[SCANNER] Final environment attempt failed:', e);
+            }
 
-        return () => {
-            const inst = html5QrRef.current;
-            if (!inst) return;
+            await startWith({ facingMode: 'user' });
 
-            // html5-qrcode throws "Cannot clear while scan is ongoing" if clear() is called
-            // before stop() fully completes. Chain them.
-            inst
-                .stop()
-                .then(() => inst.clear())
-                .catch(() => {
-                    // ignore
-                })
-                .finally(() => {
-                    if (html5QrRef.current === inst) {
-                        html5QrRef.current = null;
-                    }
-                });
-        };
-    }, [scanning]);
+        } catch (err: unknown) {
+            console.error('[SCANNER] Initialization failed:', err);
+            setResult({
+                success: false,
+                message: 'Camera access denied or not found. Please ensure permissions are enabled.',
+            });
+            setScanning(false);
+        }
+    };
 
+    setupScanner();
+
+    return () => {
+        const inst = html5QrRef.current;
+        if (!inst) return;
+
+        inst
+            .stop()
+            .then(() => inst.clear())
+            .catch(() => {})
+            .finally(() => {
+                if (html5QrRef.current === inst) {
+                    html5QrRef.current = null;
+                }
+            });
+    };
+}, [scanning]);
+    
     const stopScanning = () => {
         // Keep this synchronous to avoid React/Next concurrent transition issues.
         // Camera teardown is handled by the useEffect cleanup when `scanning` changes or the component unmounts.
