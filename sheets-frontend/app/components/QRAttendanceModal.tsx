@@ -30,38 +30,13 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         message: string;
     } | null>(null);
 
-    // Track server rotation timestamp and interval
-    const serverRotationTimestamp = useRef<number>(0);
-    const serverRotationInterval = useRef<number>(5);
-
-    // ✅ Sync ref when user changes interval slider
-    useEffect(() => {
-        if (!isActive) {
-            serverRotationInterval.current = rotationInterval;
-            setTimeLeft(rotationInterval);
-        }
-    }, [rotationInterval, isActive]);
+    // Simple client-side countdown
+    const clientStartTime = useRef<number>(0);
+    const intervalDuration = useRef<number>(5);
 
     const showNotification = (type: 'success' | 'error' | 'info', message: string) => {
         setNotification({ type, message });
         setTimeout(() => setNotification(null), 5000);
-    };
-
-    const parseServerTime = (isoString: string): number => {
-        try {
-            const cleanString = isoString.endsWith('Z') ? isoString.slice(0, -1) : isoString;
-            const date = new Date(cleanString);
-            return date.getTime();
-        } catch {
-            return Date.now();
-        }
-    };
-
-    const calculateTimeLeft = (rotationTimestamp: number, interval: number): number => {
-        const now = Date.now();
-        const elapsed = Math.floor((now - rotationTimestamp) / 1000);
-        const remaining = interval - (elapsed % interval);
-        return remaining <= 0 ? interval : remaining;
     };
 
     const generateQRCode = async (code: string) => {
@@ -92,9 +67,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 return;
             }
 
-            const requestStartTime = Date.now();
-            console.log('[QR MODAL] 📤 Sending request at:', new Date(requestStartTime).toISOString());
-
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_URL}/qr/start-session`,
                 {
@@ -116,42 +88,25 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 throw new Error(text || 'Failed to start session');
             }
 
-            const responseReceivedTime = Date.now();
-            const networkDelay = responseReceivedTime - requestStartTime;
-            console.log('[QR MODAL] 📥 Response received, network delay:', networkDelay, 'ms');
-
             const data = await response.json();
-            console.log('[QR MODAL] Session started:', data);
+            console.log('[QR MODAL] ✅ Session started:', data.session);
 
             const session = data.session;
             const interval = Number(session.rotation_interval ?? rotationInterval);
-            const lastRotation = session.last_rotation ?? session.code_generated_at ?? session.started_at;
-            const timestamp = parseServerTime(lastRotation);
 
-            console.log('[QR MODAL] 📊 Server data:', {
-                interval,
-                serverTimestamp: new Date(timestamp).toISOString(),
-                localTime: new Date().toISOString(),
-                timeDiff: (Date.now() - timestamp) / 1000 + 's'
-            });
+            // ✅ SIMPLE CLIENT-SIDE APPROACH
+            // Start countdown from NOW, not from server timestamp
+            clientStartTime.current = Date.now();
+            intervalDuration.current = interval;
 
-            // Store in refs
-            serverRotationTimestamp.current = timestamp;
-            serverRotationInterval.current = interval;
-
-            // ✅ START AT FULL INTERVAL - Let countdown naturally sync
-            // This prevents the jarring "2s" start when interval is 8s
-            // The countdown will self-correct within 1 second anyway
-            const initialTimeLeft = interval;
-
-            console.log('[QR MODAL] ⏰ Starting countdown at FULL interval:', interval + 's');
+            console.log('[QR MODAL] ⏰ Starting countdown at:', interval + 's');
 
             setIsActive(true);
             setRotationInterval(interval);
             setCurrentCode(session.current_code);
             setScannedCount(session.scanned_students?.length ?? 0);
             setSessionNumber(session.session_number || 1);
-            setTimeLeft(initialTimeLeft);
+            setTimeLeft(interval); // Start at FULL interval
 
             await generateQRCode(session.current_code);
             showNotification('success', `Session ${session.session_number} started!`);
@@ -162,16 +117,14 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         }
     };
 
-    // Countdown timer - updates every 100ms
+    // ✅ SIMPLE COUNTDOWN - Just count down from start time
     useEffect(() => {
         if (!isActive) return;
 
         const countdownInterval = setInterval(() => {
-            const remaining = calculateTimeLeft(
-                serverRotationTimestamp.current,
-                serverRotationInterval.current
-            );
-            setTimeLeft(remaining);
+            const elapsed = Math.floor((Date.now() - clientStartTime.current) / 1000);
+            const remaining = intervalDuration.current - (elapsed % intervalDuration.current);
+            setTimeLeft(remaining <= 0 ? intervalDuration.current : remaining);
         }, 100);
 
         return () => clearInterval(countdownInterval);
@@ -207,8 +160,8 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
                 // Check if interval changed
                 const newInterval = Number(session.rotation_interval ?? rotationInterval);
-                if (newInterval !== serverRotationInterval.current) {
-                    serverRotationInterval.current = newInterval;
+                if (newInterval !== intervalDuration.current) {
+                    intervalDuration.current = newInterval;
                     setRotationInterval(newInterval);
                 }
 
@@ -217,20 +170,10 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 if (newCode && newCode !== currentCode) {
                     console.log('[QR MODAL] 🔄 Code rotated to:', newCode);
                     
-                    // Update rotation timestamp
-                    const lastRotation = session.last_rotation ?? session.code_generated_at ?? session.started_at;
-                    const timestamp = parseServerTime(lastRotation);
-                    serverRotationTimestamp.current = timestamp;
+                    // Reset countdown from NOW
+                    clientStartTime.current = Date.now();
+                    setTimeLeft(intervalDuration.current);
                     
-                    // Calculate actual remaining time immediately
-                    const remaining = calculateTimeLeft(timestamp, serverRotationInterval.current);
-                    
-                    console.log('[QR MODAL] ⏰ After rotation:', {
-                        timestamp: new Date(timestamp).toISOString(),
-                        timeLeft: remaining
-                    });
-                    
-                    setTimeLeft(remaining);
                     setCurrentCode(newCode);
                     await generateQRCode(newCode);
                     showNotification('info', 'QR Code refreshed!');
@@ -401,7 +344,11 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                                         min="3"
                                         max="30"
                                         value={rotationInterval}
-                                        onChange={(e) => setRotationInterval(Number(e.target.value))}
+                                        onChange={(e) => {
+                                            const newInterval = Number(e.target.value);
+                                            setRotationInterval(newInterval);
+                                            setTimeLeft(newInterval);
+                                        }}
                                         className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
                                     />
                                     <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border-2 border-emerald-500">
