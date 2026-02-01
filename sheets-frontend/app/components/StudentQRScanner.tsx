@@ -112,19 +112,15 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
     
             console.log('[STUDENT SCANNER] ✅ SUCCESS!');
             
-            // Set success result
+            // Show success message while camera is still running
             setResult({ success: true, message: data.message || 'Attendance marked successfully!' });
             
-            // Stop scanning after a brief delay to let UI update
+            // Wait a bit to show the success message, then close everything smoothly
             setTimeout(() => {
                 setScanning(false);
                 setProcessing(false);
-            }, 100);
-            
-            // Close modal after showing success
-            setTimeout(() => {
                 onClose();
-            }, 3000);
+            }, 2000); // Reduced to 2 seconds for smoother experience
     
         } catch (error: any) {
             console.error('[STUDENT SCANNER] ❌ Error:', error);
