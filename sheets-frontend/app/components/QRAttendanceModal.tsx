@@ -34,6 +34,14 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
     const serverRotationTimestamp = useRef<number>(0);
     const serverRotationInterval = useRef<number>(5);
 
+    // ✅ Sync ref when user changes interval slider
+    useEffect(() => {
+        if (!isActive) {
+            serverRotationInterval.current = rotationInterval;
+            setTimeLeft(rotationInterval);
+        }
+    }, [rotationInterval, isActive]);
+
     const showNotification = (type: 'success' | 'error' | 'info', message: string) => {
         setNotification({ type, message });
         setTimeout(() => setNotification(null), 5000);
