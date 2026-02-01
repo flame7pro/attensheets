@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, QrCode, CheckCircle, AlertCircle, Camera, Search } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 
@@ -25,140 +25,15 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
     const [processing, setProcessing] = useState<boolean>(false);
     const [searchQuery, setSearchQuery] = useState<string>('');
     const html5QrRef = useRef<Html5Qrcode | null>(null);
+    const isCleaningUpRef = useRef<boolean>(false);
 
-    useEffect(() => {
-        const setupScanner = async () => {
-            if (!scanning) return;
-    
-            try {
-                const regionId = 'qr-reader';
-                const elem = document.getElementById(regionId);
-                if (!elem) return;
-    
-                if (!html5QrRef.current) {
-                    html5QrRef.current = new Html5Qrcode(regionId);
-                }
-    
-                // Cross-device configuration
-                const config = {
-                    fps: 10,
-                    qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
-                        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-                        const size = Math.max(220, Math.min(360, Math.floor(minEdge * 0.78)));
-                        return { width: size, height: size };
-                    },
-                    aspectRatio: 1.0,
-                };
-    
-                const startWith = async (
-                    cameraIdOrConstraints: string | MediaTrackConstraints
-                ) => {
-                    if (!html5QrRef.current) return;
-                    await html5QrRef.current.start(
-                        cameraIdOrConstraints,
-                        config,
-                        onScanSuccess,
-                        onScanFailure
-                    );
-                };
-    
-                // Detect mobile
-                const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    
-                // On mobile, try facingMode first (most reliable)
-                if (isMobile) {
-                    try {
-                        await startWith({ facingMode: { ideal: 'environment' } });
-                        return;
-                    } catch (e) {
-                        console.warn('[SCANNER] environment camera start failed:', e);
-                    }
-                }
-    
-                // Try to get camera list
-                let cameras: Array<{ id: string; label: string }> = [];
-                try {
-                    cameras = await Html5Qrcode.getCameras();
-                } catch {
-                    cameras = [];
-                }
-    
-                const pickBestCameraId = () => {
-                    if (!cameras.length) return null;
-    
-                    const scored = cameras.map((c, idx) => {
-                        const label = (c.label || '').toLowerCase();
-                        let score = 0;
-    
-                        if (label.includes('back') || label.includes('rear') || label.includes('environment')) score += 100;
-                        if (label.includes('virtual') || label.includes('obs') || label.includes('manycam')) score -= 50;
-                        score += idx;
-    
-                        return { id: c.id, score };
-                    });
-    
-                    scored.sort((a, b) => b.score - a.score);
-                    return scored[0]?.id || null;
-                };
-    
-                const bestId = pickBestCameraId();
-    
-                if (bestId) {
-                    try {
-                        await startWith(bestId);
-                        return;
-                    } catch (e) {
-                        console.warn('[SCANNER] cameraId start failed, falling back:', e);
-                    }
-                }
-    
-                try {
-                    await startWith({ facingMode: 'environment' });
-                    return;
-                } catch (e) {
-                    console.warn('[SCANNER] environment camera start failed, trying user camera:', e);
-                }
-    
-                await startWith({ facingMode: 'user' });
-            } catch (err: unknown) {
-                console.error('[SCANNER] Initialization failed:', err);
-                setResult({
-                    success: false,
-                    message: 'Camera access denied or not found. Please ensure permissions are enabled.',
-                });
-                setScanning(false);
-            }
-        };
-    
-        setupScanner();
-    
-        return () => {
-            const inst = html5QrRef.current;
-            if (!inst) return;
-    
-            inst
-                .stop()
-                .then(() => inst.clear())
-                .catch(() => {
-                    // ignore
-                })
-                .finally(() => {
-                    if (html5QrRef.current === inst) {
-                        html5QrRef.current = null;
-                    }
-                });
-        };
-    }, [scanning]);
-    
-    const stopScanning = () => {
-        // Keep this synchronous to avoid React/Next concurrent transition issues.
-        // Camera teardown is handled by the useEffect cleanup when `scanning` changes or the component unmounts.
+    const stopScanning = useCallback(() => {
         setScanning(false);
         setProcessing(false);
-    };
+    }, []);
 
-    const onScanSuccess = async (decodedText: string) => {
-        if (processing) return;
+    const onScanSuccess = useCallback(async (decodedText: string) => {
+        if (processing || isCleaningUpRef.current) return;
         setProcessing(true);
 
         console.log('[STUDENT SCANNER] ='.repeat(30));
@@ -167,13 +42,9 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
         try {
             let qrData: { class_id: string; date: string; code: string };
 
-            // Parse the QR code JSON
             try {
                 qrData = JSON.parse(decodedText);
                 console.log('[STUDENT SCANNER] ✅ Parsed QR data:', qrData);
-                console.log('[STUDENT SCANNER] - class_id:', qrData.class_id);
-                console.log('[STUDENT SCANNER] - date:', qrData.date);
-                console.log('[STUDENT SCANNER] - code:', qrData.code);
             } catch (parseError) {
                 console.error('[STUDENT SCANNER] ❌ Failed to parse QR code:', parseError);
                 setResult({
@@ -184,12 +55,8 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 return;
             }
 
-            // ✅ FIX: Check for date instead of session_id
             if (!qrData.class_id || !qrData.date || !qrData.code) {
                 console.error('[STUDENT SCANNER] ❌ Missing required fields');
-                console.log('[STUDENT SCANNER] Has class_id?', !!qrData.class_id);
-                console.log('[STUDENT SCANNER] Has date?', !!qrData.date);
-                console.log('[STUDENT SCANNER] Has code?', !!qrData.code);
                 setResult({
                     success: false,
                     message: 'Invalid QR code - missing required data',
@@ -198,11 +65,8 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 return;
             }
 
-            // Check if QR code is for the selected class
             if (qrData.class_id !== selectedClass) {
                 console.error('[STUDENT SCANNER] ❌ Class mismatch');
-                console.log('[STUDENT SCANNER] QR class_id:', qrData.class_id);
-                console.log('[STUDENT SCANNER] Selected class:', selectedClass);
                 setResult({
                     success: false,
                     message: 'This QR code is for a different class!',
@@ -225,18 +89,10 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 return;
             }
 
-            console.log('[STUDENT SCANNER] ✅ Token found');
             console.log('[STUDENT SCANNER] 📤 Sending to backend...');
 
-            // Backend expects the ENTIRE QR JSON string as the qr_code parameter
-            const qrCodeString = decodedText; // Complete JSON string
-
-            console.log('[STUDENT SCANNER] QR Code String:', qrCodeString);
-            console.log('[STUDENT SCANNER] Class ID:', qrData.class_id);
-
-            // Build URL with query parameters
+            const qrCodeString = decodedText;
             const url = `${process.env.NEXT_PUBLIC_API_URL}/qr/scan?class_id=${qrData.class_id}&qr_code=${encodeURIComponent(qrCodeString)}`;
-            console.log('[STUDENT SCANNER] Full URL:', url);
 
             const response = await fetch(url, {
                 method: 'POST',
@@ -246,24 +102,20 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 },
             });
 
-            console.log('[STUDENT SCANNER] 📥 Response status:', response.status);
-
             const data = await response.json();
-            console.log('[STUDENT SCANNER] 📥 Response data:', data);
+            console.log('[STUDENT SCANNER] 📥 Response:', data);
 
             if (!response.ok) {
-                console.error('[STUDENT SCANNER] ❌ Backend error:', data.detail);
                 throw new Error(data.detail || 'Failed to mark attendance');
             }
 
             console.log('[STUDENT SCANNER] ✅ SUCCESS!');
             setResult({ success: true, message: data.message || 'Attendance marked successfully!' });
 
-            await stopScanning();
+            stopScanning();
             setTimeout(onClose, 3000);
         } catch (error: any) {
-            console.error('[STUDENT SCANNER] ❌ Scan error:', error);
-            console.error('[STUDENT SCANNER] Error details:', error.message);
+            console.error('[STUDENT SCANNER] ❌ Error:', error);
             setResult({
                 success: false,
                 message: error.message || 'Failed to scan QR code',
@@ -272,13 +124,136 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
         } finally {
             console.log('[STUDENT SCANNER] ='.repeat(30));
         }
-    };
+    }, [processing, selectedClass, stopScanning, onClose]);
 
-    const onScanFailure = (_error: string) => {
-        // Ignore scan failures (they happen continuously while scanning)
-    };
+    const onScanFailure = useCallback((_error: string) => {
+        // Ignore scan failures
+    }, []);
 
-    const startScanning = async () => {
+    useEffect(() => {
+        if (!scanning) return;
+
+        let isMounted = true;
+        isCleaningUpRef.current = false;
+
+        const setupScanner = async () => {
+            try {
+                const regionId = 'qr-reader';
+                const elem = document.getElementById(regionId);
+                if (!elem || !isMounted) return;
+
+                if (!html5QrRef.current) {
+                    html5QrRef.current = new Html5Qrcode(regionId);
+                }
+
+                const config = {
+                    fps: 10,
+                    qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+                        const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+                        const size = Math.max(220, Math.min(360, Math.floor(minEdge * 0.78)));
+                        return { width: size, height: size };
+                    },
+                    aspectRatio: 1.0,
+                };
+
+                const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+                if (isMobile) {
+                    try {
+                        await html5QrRef.current.start(
+                            { facingMode: { ideal: 'environment' } },
+                            config,
+                            onScanSuccess,
+                            onScanFailure
+                        );
+                        return;
+                    } catch (e) {
+                        console.warn('[SCANNER] environment camera failed:', e);
+                    }
+                }
+
+                let cameras: Array<{ id: string; label: string }> = [];
+                try {
+                    cameras = await Html5Qrcode.getCameras();
+                } catch {
+                    cameras = [];
+                }
+
+                if (cameras.length > 0) {
+                    const backCamera = cameras.find(c => {
+                        const label = (c.label || '').toLowerCase();
+                        return label.includes('back') || label.includes('rear') || label.includes('environment');
+                    });
+
+                    const selectedCamera = backCamera || cameras[cameras.length - 1];
+
+                    try {
+                        await html5QrRef.current.start(
+                            selectedCamera.id,
+                            config,
+                            onScanSuccess,
+                            onScanFailure
+                        );
+                        return;
+                    } catch (e) {
+                        console.warn('[SCANNER] camera ID failed:', e);
+                    }
+                }
+
+                try {
+                    await html5QrRef.current.start(
+                        { facingMode: 'environment' },
+                        config,
+                        onScanSuccess,
+                        onScanFailure
+                    );
+                    return;
+                } catch (e) {
+                    console.warn('[SCANNER] environment fallback failed:', e);
+                }
+
+                await html5QrRef.current.start(
+                    { facingMode: 'user' },
+                    config,
+                    onScanSuccess,
+                    onScanFailure
+                );
+
+            } catch (err: any) {
+                console.error('[SCANNER] Initialization failed:', err);
+                if (isMounted) {
+                    setResult({
+                        success: false,
+                        message: 'Camera access denied. Please enable camera permissions.',
+                    });
+                    setScanning(false);
+                }
+            }
+        };
+
+        setupScanner();
+
+        return () => {
+            isMounted = false;
+            isCleaningUpRef.current = true;
+            const inst = html5QrRef.current;
+            if (!inst) return;
+
+            inst
+                .stop()
+                .then(() => inst.clear())
+                .catch((err) => {
+                    console.warn('[SCANNER] Cleanup error:', err);
+                })
+                .finally(() => {
+                    if (html5QrRef.current === inst) {
+                        html5QrRef.current = null;
+                    }
+                });
+        };
+    }, [scanning, onScanSuccess, onScanFailure]);
+
+    const startScanning = () => {
         if (!selectedClass) {
             alert('Please select a class first');
             return;
@@ -309,8 +284,6 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     </div>
                     <button
                         onClick={() => {
-                            // Avoid async stop/close races that can trigger React/Next.js transition errors.
-                            // The effect cleanup handles releasing the camera on unmount.
                             setScanning(false);
                             setProcessing(false);
                             onClose();
@@ -448,18 +421,12 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            {/*
-                              html5-qrcode injects its own markup inside #qr-reader.
-                              We wrap it in a constrained, responsive, aspect-square container so it
-                              looks consistent on phones/tablets/laptops.
-                            */}
                             <div className="w-full max-w-md mx-auto">
                                 <div className="relative aspect-square bg-black rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
                                     <div id="qr-reader" className="absolute inset-0" />
                                 </div>
                             </div>
 
-                            {/* Clean up html5-qrcode injected UI pieces (we control start/stop ourselves) */}
                             <style jsx global>{`
                                 #qr-reader video {
                                     width: 100% !important;
