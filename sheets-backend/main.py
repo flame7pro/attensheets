@@ -185,6 +185,46 @@ class MultiSessionAttendanceUpdate(BaseModel):
 
 # ==================== HELPER FUNCTIONS ====================
 
+def get_current_session_number_for_date(class_data: dict, date: str) -> int:
+    """
+    Calculate what the next session number should be based on existing attendance.
+    
+    Logic:
+    - Look at all students' attendance for this date
+    - Find the maximum number of sessions already marked
+    - Return max_sessions + 1
+    - If no sessions exist, return 1
+    """
+    max_sessions = 0
+    
+    students = class_data.get("students", [])
+    
+    for student in students:
+        attendance = student.get("attendance", {})
+        day_data = attendance.get(date)
+        
+        if not day_data:
+            continue
+        
+        # Count sessions for this student on this date
+        session_count = 0
+        
+        if isinstance(day_data, dict) and "sessions" in day_data:
+            # NEW FORMAT: { sessions: [...], updated_at: "..." }
+            session_count = len([s for s in day_data["sessions"] if s.get("status")])
+        elif isinstance(day_data, dict) and "status" in day_data:
+            # OLD FORMAT: { status: 'P', count: 2 }
+            session_count = day_data.get("count", 1)
+        elif isinstance(day_data, str):
+            # VERY OLD FORMAT: 'P' | 'A' | 'L'
+            session_count = 1
+        
+        # Track the maximum
+        max_sessions = max(max_sessions, session_count)
+    
+    # Next session number is max + 1 (or 1 if no sessions exist)
+    return max_sessions + 1
+
 def get_password_hash(password: str) -> str:
     """Hash a password using SHA-256"""
     return hashlib.sha256(password.encode()).hexdigest()
@@ -2031,9 +2071,41 @@ async def start_qr_session(request: dict, email: str = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="Class not found")
     
     try:
-        # Start QR session
-        qr_session = db.start_qr_session(class_id, user["id"], date, rotation_interval)
-        return {"success": True, "session": qr_session}
+        # ✅ MODIFY THIS SECTION:
+        # Instead of calling db.start_qr_session, do it manually here
+        
+        # Calculate session number using our helper function
+        session_number = get_current_session_number_for_date(class_data, date)
+        print(f"[API] Calculated session number: {session_number}")
+        
+        # Generate QR code
+        import random
+        import string
+        code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        
+        # Create session data
+        session_data = {
+            "class_id": class_id,
+            "teacher_id": user["id"],
+            "date": date,
+            "current_code": code,
+            "rotation_interval": rotation_interval,
+            "session_number": session_number,  # ✅ Dynamic session number
+            "scanned_students": [],
+            "started_at": datetime.utcnow().isoformat(),
+            "last_rotation": datetime.utcnow().isoformat()
+        }
+        
+        # Store in db's active sessions
+        session_key = f"{class_id}_{date}"
+        if not hasattr(db, 'active_qr_sessions'):
+            db.active_qr_sessions = {}
+        db.active_qr_sessions[session_key] = session_data
+        
+        print(f"[API] ✅ QR session started (Session #{session_number})")
+        
+        return {"success": True, "session": session_data}
+        
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
