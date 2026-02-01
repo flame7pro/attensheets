@@ -176,7 +176,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                     
                     setCurrentCode(newCode);
                     await generateQRCode(newCode);
-                    showNotification('info', 'QR Code refreshed!');
+                    // ✅ REMOVED: QR Code refresh notification
                 }
 
             } catch (e: unknown) {
