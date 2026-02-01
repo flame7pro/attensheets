@@ -2051,7 +2051,7 @@ async def submit_contact(request: ContactRequest):
 
 @app.post("/qr/start-session")
 async def start_qr_session(request: dict, email: str = Depends(verify_token)):
-    """Start QR session for a date (no session management)"""
+    """Start QR session for a date"""
     class_id = request.get("class_id")
     date = request.get("date")  # YYYY-MM-DD format
     rotation_interval = request.get("rotation_interval", 5)
@@ -2071,32 +2071,32 @@ async def start_qr_session(request: dict, email: str = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="Class not found")
     
     try:
-        # ✅ MODIFY THIS SECTION:
-        # Instead of calling db.start_qr_session, do it manually here
-        
-        # Calculate session number using our helper function
+        # ✅ Calculate session number using helper function
         session_number = get_current_session_number_for_date(class_data, date)
         print(f"[API] Calculated session number: {session_number}")
         
-        # Generate QR code
+        # ✅ Generate QR code
         import random
         import string
         code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
         
-        # Create session data
+        # ✅ Create session data with proper timestamps
+        now_iso = datetime.now(timezone.utc).isoformat()
+        
         session_data = {
             "class_id": class_id,
             "teacher_id": user["id"],
             "date": date,
             "current_code": code,
             "rotation_interval": rotation_interval,
-            "session_number": session_number,  # ✅ Dynamic session number
+            "session_number": session_number,
             "scanned_students": [],
-            "started_at": datetime.utcnow().isoformat(),
-            "last_rotation": datetime.utcnow().isoformat()
+            "started_at": now_iso,
+            "last_rotation": now_iso,
+            "code_generated_at": now_iso  # ✅ NEW: Track when code was generated
         }
         
-        # Store in db's active sessions
+        # ✅ Store in active sessions
         session_key = f"{class_id}_{date}"
         if not hasattr(db, 'active_qr_sessions'):
             db.active_qr_sessions = {}
@@ -2110,18 +2110,82 @@ async def start_qr_session(request: dict, email: str = Depends(verify_token)):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print(f"[API] Error starting QR session: {e}")
-        raise HTTPException(status_code=500, detail="Failed to start QR session")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to start QR session: {str(e)}")
+
+def rotate_qr_code_if_needed(session: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Check if QR code needs rotation and rotate if needed.
+    Returns updated session data.
+    """
+    import random
+    import string
+    from datetime import datetime, timezone
+    
+    rotation_interval = session.get("rotation_interval", 5)
+    
+    # Get last rotation time
+    last_rotation = session.get("code_generated_at") or session.get("last_rotation") or session.get("started_at")
+    
+    if not last_rotation:
+        return session
+    
+    # Parse ISO timestamp
+    try:
+        if isinstance(last_rotation, str):
+            # Remove 'Z' suffix if present
+            if last_rotation.endswith('Z'):
+                last_rotation = last_rotation[:-1]
+            last_rotation_dt = datetime.fromisoformat(last_rotation)
+        else:
+            last_rotation_dt = last_rotation
+    except Exception as e:
+        print(f"[ROTATE] Error parsing timestamp: {e}")
+        return session
+    
+    # Calculate elapsed time
+    now = datetime.now(timezone.utc)
+    elapsed_seconds = (now - last_rotation_dt).total_seconds()
+    
+    print(f"[ROTATE] Elapsed: {elapsed_seconds}s, Interval: {rotation_interval}s")
+    
+    # Rotate if needed
+    if elapsed_seconds >= rotation_interval:
+        new_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        now_iso = now.isoformat()
+        
+        session["current_code"] = new_code
+        session["last_rotation"] = now_iso
+        session["code_generated_at"] = now_iso
+        
+        print(f"[ROTATE] ✅ Code rotated to: {new_code}")
+    
+    return session
     
 @app.get("/qr/session/{class_id}")
 async def get_qr_session(class_id: str, date: str, email: str = Depends(verify_token)):
-    """Get active QR session for a class on a specific date"""
+    """Get active QR session with auto-rotation"""
     user = db.get_user_by_email(email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    session = db.get_qr_session(class_id, date)
+    session_key = f"{class_id}_{date}"
+    
+    # Check active sessions
+    if not hasattr(db, 'active_qr_sessions'):
+        db.active_qr_sessions = {}
+    
+    session = db.active_qr_sessions.get(session_key)
+    
     if not session or session["teacher_id"] != user["id"]:
         return {"active": False}
+    
+    # ✅ AUTO-ROTATE CODE IF NEEDED
+    session = rotate_qr_code_if_needed(session)
+    
+    # Update in memory
+    db.active_qr_sessions[session_key] = session
     
     return {"active": True, "session": session}
 
@@ -2131,16 +2195,10 @@ async def scan_qr_code(
     qr_code: str,
     email: str = Depends(verify_token)
 ):
-    """
-    Student scans QR code to mark attendance
-    - First scan of the day → Marks in main sheet
-    - Subsequent scans → Adds to multi-session data
-    """
-    print(f"\n{'='*60}")
-    print(f"[QR_SCAN] QR code scan attempt")
-    print(f"  Student Email: {email}")
+    """Student scans QR code to mark attendance"""
+    print(f"\n[QR_SCAN] Scan attempt")
+    print(f"  Email: {email}")
     print(f"  Class ID: {class_id}")
-    print(f"{'='*60}")
     
     try:
         # Get student
@@ -2149,39 +2207,152 @@ async def scan_qr_code(
             raise HTTPException(status_code=404, detail="Student not found")
         
         student_id = student["id"]
-        print(f"[QR_SCAN] Student found: {student_id}")
         
-        # Parse QR code
+        # ✅ Parse QR code - Handle URL encoding
         try:
-            qr_data = json.loads(qr_code)
+            import urllib.parse
+            qr_code_decoded = urllib.parse.unquote(qr_code)
+            qr_data = json.loads(qr_code_decoded)
+            
             date = qr_data.get("date")
             qr_code_value = qr_data.get("code")
-            qr_class_id = qr_data.get("class_id")
+            qr_class_id = str(qr_data.get("class_id"))
             
-            print(f"[QR_SCAN] Date: {date}, Code: {qr_code_value}")
+            print(f"[QR_SCAN] Parsed - Date: {date}, Code: {qr_code_value}")
         except json.JSONDecodeError as e:
-            raise ValueError("Invalid QR code format")
+            print(f"[QR_SCAN] JSON parse error: {e}")
+            print(f"[QR_SCAN] Raw QR: {qr_code}")
+            raise HTTPException(status_code=400, detail="Invalid QR code format")
         
         # Validate class ID
-        if qr_class_id != class_id:
-            raise ValueError("QR code is for a different class")
+        if str(qr_class_id) != str(class_id):
+            raise HTTPException(status_code=400, detail="QR code is for a different class")
         
-        # Call database scan function
-        result = db.scan_qr_code(student_id, class_id, qr_code, date)
+        # Get active session
+        session_key = f"{class_id}_{date}"
         
-        print(f"[QR_SCAN] Attendance marked successfully")
-        print(f"{'='*60}\n")
+        if not hasattr(db, 'active_qr_sessions'):
+            db.active_qr_sessions = {}
         
-        return result
-    
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        session = db.active_qr_sessions.get(session_key)
+        
+        if not session:
+            raise HTTPException(status_code=404, detail="No active QR session for this date")
+        
+        # ✅ Validate QR code
+        if session.get("current_code") != qr_code_value:
+            print(f"[QR_SCAN] Code mismatch - Expected: {session.get('current_code')}, Got: {qr_code_value}")
+            raise HTTPException(status_code=400, detail="Invalid or expired QR code. Please try scanning again.")
+        
+        session_number = session.get("session_number", 1)
+        
+        # Find enrollment
+        enrollment = db.enrollments.find_one({
+            "student_id": student_id,
+            "class_id": class_id,
+            "status": "active"
+        })
+        
+        if not enrollment:
+            raise HTTPException(status_code=403, detail="You are not enrolled in this class")
+        
+        student_record_id = enrollment.get("student_record_id")
+        
+        # Get class data
+        class_file = db.get_class_file(session.get("teacher_id"), class_id)
+        class_data = db.read_json(class_file)
+        
+        # Find student record
+        students = class_data.get("students", [])
+        student_record = None
+        student_index = None
+        
+        for idx, s in enumerate(students):
+            if s.get("id") == student_record_id:
+                student_record = s
+                student_index = idx
+                break
+        
+        if not student_record:
+            raise HTTPException(status_code=404, detail="Student record not found")
+        
+        # Initialize attendance
+        if "attendance" not in student_record:
+            student_record["attendance"] = {}
+        
+        current_value = student_record["attendance"].get(date)
+        
+        # Mark attendance
+        if session_number == 1:
+            student_record["attendance"][date] = "P"
+        else:
+            # Multi-session
+            if isinstance(current_value, str) or current_value is None:
+                sessions = []
+                for i in range(1, session_number + 1):
+                    sessions.append({
+                        "id": f"session_{i}",
+                        "name": f"QR Session {i}",
+                        "status": current_value if (i == 1 and isinstance(current_value, str)) else ("P" if i == session_number else "A")
+                    })
+                student_record["attendance"][date] = {
+                    "sessions": sessions,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }
+            elif isinstance(current_value, dict) and "sessions" in current_value:
+                sessions = current_value.get("sessions", [])
+                
+                # Mark this session as present
+                session_found = False
+                for s in sessions:
+                    if s.get("id") == f"session_{session_number}":
+                        s["status"] = "P"
+                        session_found = True
+                        break
+                
+                if not session_found:
+                    sessions.append({
+                        "id": f"session_{session_number}",
+                        "name": f"QR Session {session_number}",
+                        "status": "P"
+                    })
+                
+                student_record["attendance"][date] = {
+                    "sessions": sessions,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }
+        
+        # Update class
+        students[student_index] = student_record
+        class_data["students"] = students
+        class_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        class_data["statistics"] = db.calculate_class_statistics(class_data, class_id)
+        
+        db.write_json(class_file, class_data)
+        
+        # Update session
+        scanned = session.get("scanned_students", [])
+        if student_record_id not in scanned:
+            scanned.append(student_record_id)
+            session["scanned_students"] = scanned
+            db.active_qr_sessions[session_key] = session
+        
+        print(f"[QR_SCAN] ✅ Success - Session #{session_number}")
+        
+        return {
+            "success": True,
+            "message": f"Attendance marked as Present (Session #{session_number})",
+            "session_number": session_number,
+            "date": date
+        }
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"[QR_SCAN] Error: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to scan QR code"
-        )
+        print(f"[QR_SCAN] ❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Failed to scan QR code")
     
 @app.post("/qr/stop-session")
 async def stop_qr_session(payload: dict, email: str = Depends(verify_token)):
@@ -2197,12 +2368,117 @@ async def stop_qr_session(payload: dict, email: str = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="User not found")
 
     try:
-        result = db.stop_qr_session(class_id, user["id"], date)
-        return result
+        print(f"\n[QR_STOP] Stopping session for class {class_id}, date {date}")
+        
+        session_key = f"{class_id}_{date}"
+        
+        # Get active session
+        if not hasattr(db, 'active_qr_sessions'):
+            db.active_qr_sessions = {}
+        
+        session = db.active_qr_sessions.get(session_key)
+        
+        if not session:
+            raise HTTPException(status_code=404, detail="No active session found")
+        
+        if session.get("teacher_id") != user["id"]:
+            raise HTTPException(status_code=403, detail="Unauthorized")
+        
+        session_number = session.get("session_number", 1)
+        scanned_students = set(session.get("scanned_students", []))
+        
+        print(f"[QR_STOP] Session #{session_number}, Scanned: {len(scanned_students)}")
+        
+        # Get class data
+        class_data = db.get_class(user["id"], class_id)
+        if not class_data:
+            raise HTTPException(status_code=404, detail="Class not found")
+        
+        students = class_data.get("students", [])
+        absent_count = 0
+        
+        # Mark absent for non-scanned students
+        for student in students:
+            student_id = student.get("id")
+            
+            if student_id not in scanned_students:
+                if "attendance" not in student:
+                    student["attendance"] = {}
+                
+                current_value = student["attendance"].get(date)
+                
+                if session_number == 1:
+                    # First session - simple 'A'
+                    student["attendance"][date] = "A"
+                else:
+                    # Multi-session handling
+                    if isinstance(current_value, str) or current_value is None:
+                        # Convert to sessions array
+                        sessions = []
+                        for i in range(1, session_number + 1):
+                            sessions.append({
+                                "id": f"session_{i}",
+                                "name": f"QR Session {i}",
+                                "status": current_value if (i == 1 and isinstance(current_value, str)) else "A"
+                            })
+                        student["attendance"][date] = {
+                            "sessions": sessions,
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        }
+                    elif isinstance(current_value, dict) and "sessions" in current_value:
+                        # Update existing sessions
+                        sessions = current_value.get("sessions", [])
+                        existing_ids = {s.get("id") for s in sessions}
+                        
+                        # Add missing sessions
+                        for i in range(1, session_number + 1):
+                            session_id = f"session_{i}"
+                            if session_id not in existing_ids:
+                                sessions.insert(i - 1, {
+                                    "id": session_id,
+                                    "name": f"QR Session {i}",
+                                    "status": "A"
+                                })
+                        
+                        student["attendance"][date] = {
+                            "sessions": sessions,
+                            "updated_at": datetime.now(timezone.utc).isoformat()
+                        }
+                
+                absent_count += 1
+        
+        # Update class in database
+        class_data["students"] = students
+        class_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        class_data["statistics"] = db.calculate_class_statistics(class_data, class_id)
+        
+        class_file = db.get_class_file(user["id"], class_id)
+        db.write_json(class_file, class_data)
+        
+        # Update teacher overview
+        db.update_user_overview(user["id"])
+        
+        # Remove active session
+        del db.active_qr_sessions[session_key]
+        
+        print(f"[QR_STOP] ✅ Session stopped successfully")
+        print(f"  Scanned: {len(scanned_students)}, Absent: {absent_count}")
+        
+        return {
+            "success": True,
+            "scanned_count": len(scanned_students),
+            "absent_count": absent_count,
+            "session_number": session_number,
+            "date": date
+        }
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"[QR_STOP] Error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to stop QR session")
-
+        print(f"[QR_STOP] ❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to stop session: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
