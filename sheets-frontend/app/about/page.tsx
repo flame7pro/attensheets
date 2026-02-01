@@ -19,8 +19,8 @@ function Navigation() {
 
         {/* Desktop Navigation */}
         <div className="hidden md:flex items-center gap-8">
-          <a href="/" className="text-md font-medium text-emerald-600">Home</a>
-          <a href="/about" className="text-md font-medium text-slate-600 hover:text-emerald-600 transition-colors">About Us</a>
+          <a href="/" className="text-md font-medium text-slate-600 hover:text-emerald-600 transition-colors">Home</a>
+          <a href="/about" className="text-md font-medium text-emerald-600">About Us</a>
           <a href="/contact" className="text-md font-medium text-slate-600 hover:text-emerald-600 transition-colors">Contact</a>
           <a href="/auth" className="px-6 py-2.5 bg-emerald-600 text-white text-md font-medium rounded-lg hover:bg-emerald-700 hover:shadow-lg transition-all">Sign Up</a>
         </div>
