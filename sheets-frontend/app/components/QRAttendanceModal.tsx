@@ -83,6 +83,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
     const startSession = async () => {
         console.log('[QR MODAL] Starting QR session for date:', currentDate);
+        console.log('[QR MODAL] 🎚️ User selected interval:', rotationInterval);
 
         try {
             const token = localStorage.getItem('access_token');
@@ -90,6 +91,9 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 showNotification('error', 'Please login again');
                 return;
             }
+
+            const requestStartTime = Date.now();
+            console.log('[QR MODAL] 📤 Sending request at:', new Date(requestStartTime).toISOString());
 
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_URL}/qr/start-session`,
@@ -112,6 +116,10 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 throw new Error(text || 'Failed to start session');
             }
 
+            const responseReceivedTime = Date.now();
+            const networkDelay = responseReceivedTime - requestStartTime;
+            console.log('[QR MODAL] 📥 Response received, network delay:', networkDelay, 'ms');
+
             const data = await response.json();
             console.log('[QR MODAL] Session started:', data);
 
@@ -120,18 +128,23 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             const lastRotation = session.last_rotation ?? session.code_generated_at ?? session.started_at;
             const timestamp = parseServerTime(lastRotation);
 
+            console.log('[QR MODAL] 📊 Server data:', {
+                interval,
+                serverTimestamp: new Date(timestamp).toISOString(),
+                localTime: new Date().toISOString(),
+                timeDiff: (Date.now() - timestamp) / 1000 + 's'
+            });
+
             // Store in refs
             serverRotationTimestamp.current = timestamp;
             serverRotationInterval.current = interval;
 
-            // Calculate actual remaining time
-            const initialTimeLeft = calculateTimeLeft(timestamp, interval);
+            // ✅ START AT FULL INTERVAL - Let countdown naturally sync
+            // This prevents the jarring "2s" start when interval is 8s
+            // The countdown will self-correct within 1 second anyway
+            const initialTimeLeft = interval;
 
-            console.log('[QR MODAL] ⏰ Initial setup:', {
-                interval,
-                timestamp: new Date(timestamp).toISOString(),
-                timeLeft: initialTimeLeft
-            });
+            console.log('[QR MODAL] ⏰ Starting countdown at FULL interval:', interval + 's');
 
             setIsActive(true);
             setRotationInterval(interval);
