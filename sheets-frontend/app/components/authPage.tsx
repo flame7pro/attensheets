@@ -32,12 +32,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onBack, onNavigate }) => {
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-emerald-200/60 bg-white/80 backdrop-blur-xl shadow-sm">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md">
-              <img src="/logo.png" alt="Lernova Attendsheets Logo" className="w-10 h-10" />
-            </div>
-            <span className="text-lg md:text-xl font-bold text-emerald-900">
-              <Link href="/">Lernova Attendsheets</Link>
-            </span>
+            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shadow-md">
+            <img src="/logo.png" alt="Lernova Attendsheets Logo" className="w-8 h-8 sm:w-10 sm:h-10" />
+          </div>
+          <span className="text-base sm:text-xl font-bold text-emerald-900">Lernova Attendsheets</span>
           </div>
 
           {/* Desktop Menu */}
@@ -234,35 +232,35 @@ const AuthFooter = ({
 }: {
   onNavigate: (page: 'landing' | 'about' | 'contact' | 'auth' | 'app') => void;
 }) => (
-  <footer className="bg-slate-900 text-white py-16 px-6">
+<footer className="bg-slate-900 text-white py-12 sm:py-16 px-4 sm:px-6">
       <div className="max-w-7xl mx-auto">
-        <div className="grid gap-12 mb-12">
+        <div className="grid gap-8 sm:gap-12 mb-8 sm:mb-12">
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center">
-                <img src="/logo.png" alt="Lernova Attendsheets Logo" className="w-10 h-10" />
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center">
+                <img src="/logo.png" alt="Lernova Attendsheets Logo" className="w-8 h-8 sm:w-10 sm:h-10" />
               </div>
-              <span className="text-xl font-bold">Lernova Attendsheets</span>
+              <span className="text-lg sm:text-xl font-bold">Lernova Attendsheets</span>
             </div>
-            <p className="text-slate-400 leading-relaxed">
+            <p className="text-sm sm:text-base text-slate-400 leading-relaxed">
               Lernova Attendsheets by Lernova © 2026. All rights reserved.
             </p>
           </div>
         </div>
 
-        <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-slate-400 text-sm text-center md:text-left">
+        <div className="border-t border-slate-800 pt-6 sm:pt-8 flex flex-col md:flex-row justify-between items-center gap-6 md:gap-4">
+          <p className="text-slate-400 text-xs sm:text-sm text-center md:text-left">
             By Muhammad Nabeel • Rituraj Thakur • Archita Parab • Shweta Yadav • Aksh Devlapalli • Mohnish Pembarthi
             <br />
             Students at Atharva University, Mumbai
           </p>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
             <a href="https://www.instagram.com/lernova.official" className="w-10 h-10 bg-slate-800 hover:bg-emerald-600 rounded-lg flex items-center justify-center transition-colors">
               <Instagram className="w-5 h-5" />
             </a>
-            <a href="https://www.linkedin.com/company/lernova-official" className="w-10 h-10 bg-slate-800 hover:bg-emerald-600 rounded-lg flex items-center justify-center transition-colors">
-              <Linkedin className="w-5 h-5" />
+            <a href="https://www.linkedin.com/company/lernova-official" className="w-9 h-9 sm:w-10 sm:h-10 bg-slate-800 hover:bg-emerald-600 rounded-lg flex items-center justify-center transition-colors">
+              <Linkedin className="w-4 h-4 sm:w-5 sm:h-5" />
             </a>
           </div>
         </div>
