@@ -1,3 +1,5 @@
+// QRAttendanceModal.tsx - COMPLETE UNIFIED TIMER FIX
+
 import React, { useState, useEffect, useRef } from 'react';
 import { X, QrCode, Users, Clock, Zap, CheckCircle, Calendar } from 'lucide-react';
 import QRCode from 'qrcode';
@@ -30,7 +32,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         message: string;
     } | null>(null);
 
-    // Simple client-side countdown
+    // Refs for timing
     const clientStartTime = useRef<number>(0);
     const intervalDuration = useRef<number>(5);
 
@@ -94,19 +96,18 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             const session = data.session;
             const interval = Number(session.rotation_interval ?? rotationInterval);
 
-            // ✅ SIMPLE CLIENT-SIDE APPROACH
-            // Start countdown from NOW, not from server timestamp
+            // ✅ Initialize timing references
             clientStartTime.current = Date.now();
             intervalDuration.current = interval;
 
-            console.log('[QR MODAL] ⏰ Starting countdown at:', interval + 's');
+            console.log('[QR MODAL] ⏰ Timer initialized at:', interval + 's');
 
             setIsActive(true);
             setRotationInterval(interval);
             setCurrentCode(session.current_code);
             setScannedCount(session.scanned_students?.length ?? 0);
             setSessionNumber(session.session_number || 1);
-            setTimeLeft(interval); // Start at FULL interval
+            setTimeLeft(interval);
 
             await generateQRCode(session.current_code);
             showNotification('success', `Session ${session.session_number} started!`);
@@ -117,24 +118,31 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         }
     };
 
-    // ✅ SIMPLE COUNTDOWN - Just count down from start time
+    // ✅ UNIFIED EFFECT - Handles both countdown and polling
     useEffect(() => {
         if (!isActive) return;
 
-        const countdownInterval = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - clientStartTime.current) / 1000);
-            const remaining = intervalDuration.current - (elapsed % intervalDuration.current);
-            setTimeLeft(remaining <= 0 ? intervalDuration.current : remaining);
-        }, 100);
+        let animationFrameId: number;
+        let pollIntervalId: NodeJS.Timeout;
 
-        return () => clearInterval(countdownInterval);
-    }, [isActive]);
+        // ✅ SMOOTH COUNTDOWN using requestAnimationFrame
+        const updateCountdown = () => {
+            if (!isActive) return;
 
-    // Poll for session updates
-    useEffect(() => {
-        if (!isActive) return;
+            const now = Date.now();
+            const elapsed = Math.floor((now - clientStartTime.current) / 1000);
+            const cyclePosition = elapsed % intervalDuration.current;
+            const remaining = intervalDuration.current - cyclePosition;
+            
+            // Ensure we never show 0 or negative
+            setTimeLeft(remaining > 0 ? remaining : intervalDuration.current);
+            
+            // Continue animation loop
+            animationFrameId = requestAnimationFrame(updateCountdown);
+        };
 
-        const pollInterval = setInterval(async () => {
+        // ✅ BACKEND POLLING for updates
+        const pollSession = async () => {
             try {
                 const token = localStorage.getItem('access_token');
                 if (!token) return;
@@ -154,38 +162,55 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
                 const session = data.session;
                 
-                // Update stats
+                // Update stats (always safe)
                 setScannedCount(session.scanned_students?.length ?? 0);
                 setSessionNumber(session.session_number || 1);
 
-                // Check if interval changed
-                const newInterval = Number(session.rotation_interval ?? rotationInterval);
-                if (newInterval !== intervalDuration.current) {
-                    intervalDuration.current = newInterval;
-                    setRotationInterval(newInterval);
-                }
-
-                // Check if code changed (rotation occurred)
                 const newCode = session.current_code;
+                const newInterval = Number(session.rotation_interval ?? intervalDuration.current);
+                
+                // ✅ CRITICAL: Only reset timer when code actually changes
                 if (newCode && newCode !== currentCode) {
                     console.log('[QR MODAL] 🔄 Code rotated to:', newCode);
                     
-                    // Reset countdown from NOW
+                    // Reset timer from NOW
                     clientStartTime.current = Date.now();
-                    setTimeLeft(intervalDuration.current);
+                    intervalDuration.current = newInterval;
                     
+                    setRotationInterval(newInterval);
                     setCurrentCode(newCode);
                     await generateQRCode(newCode);
-                    // ✅ REMOVED: QR Code refresh notification
+                    
+                    console.log('[QR MODAL] ⏰ Timer reset to:', newInterval + 's');
+                } else {
+                    // ✅ Interval changed but code didn't rotate yet
+                    if (newInterval !== intervalDuration.current) {
+                        console.log(`[QR MODAL] ⚙️ Interval updated: ${intervalDuration.current}s → ${newInterval}s`);
+                        intervalDuration.current = newInterval;
+                        setRotationInterval(newInterval);
+                        // DON'T reset clientStartTime - let current cycle finish
+                    }
                 }
 
             } catch (e: unknown) {
                 console.error('[QR MODAL] Poll error', e);
             }
-        }, 1000);
+        };
 
-        return () => clearInterval(pollInterval);
-    }, [isActive, classId, currentDate, currentCode, rotationInterval]);
+        // ✅ Start smooth countdown animation
+        animationFrameId = requestAnimationFrame(updateCountdown);
+
+        // ✅ Start polling (every 1 second)
+        pollIntervalId = setInterval(pollSession, 1000);
+
+        // ✅ Cleanup on unmount or when isActive changes
+        return () => {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            clearInterval(pollIntervalId);
+        };
+    }, [isActive, classId, currentDate, currentCode]); // ✅ Dependencies
 
     const stopSession = async () => {
         setIsStopping(true);
