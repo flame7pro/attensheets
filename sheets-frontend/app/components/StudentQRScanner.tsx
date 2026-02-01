@@ -26,6 +26,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
     const [searchQuery, setSearchQuery] = useState<string>('');
     const html5QrRef = useRef<Html5Qrcode | null>(null);
     const isCleaningUpRef = useRef<boolean>(false);
+    const isScanningRef = useRef<boolean>(false);
 
     const stopScanning = useCallback(() => {
         setScanning(false);
@@ -131,20 +132,43 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
     }, []);
 
     useEffect(() => {
-        if (!scanning) return;
+        if (!scanning) {
+            isScanningRef.current = false;
+            return;
+        }
 
-        let isMounted = true;
+        isScanningRef.current = true;
         isCleaningUpRef.current = false;
 
         const setupScanner = async () => {
             try {
+                // Add a small delay to ensure DOM is ready
+                await new Promise(resolve => setTimeout(resolve, 100));
+
                 const regionId = 'qr-reader';
                 const elem = document.getElementById(regionId);
-                if (!elem || !isMounted) return;
-
-                if (!html5QrRef.current) {
-                    html5QrRef.current = new Html5Qrcode(regionId);
+                
+                if (!elem) {
+                    console.error('[SCANNER] Element not found');
+                    throw new Error('Scanner element not found');
                 }
+
+                if (!isScanningRef.current) return;
+
+                // Clean up any existing instance first
+                if (html5QrRef.current) {
+                    try {
+                        await html5QrRef.current.stop();
+                        await html5QrRef.current.clear();
+                    } catch (e) {
+                        console.warn('[SCANNER] Cleanup of existing instance failed:', e);
+                    }
+                    html5QrRef.current = null;
+                }
+
+                if (!isScanningRef.current) return;
+
+                html5QrRef.current = new Html5Qrcode(regionId);
 
                 const config = {
                     fps: 10,
@@ -157,25 +181,59 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 };
 
                 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                console.log('[SCANNER] Is mobile:', isMobile);
 
+                // For mobile, ONLY use facingMode constraints
                 if (isMobile) {
+                    console.log('[SCANNER] Starting with mobile environment camera');
                     try {
                         await html5QrRef.current.start(
-                            { facingMode: { ideal: 'environment' } },
+                            { 
+                                facingMode: { exact: 'environment' }
+                            },
                             config,
                             onScanSuccess,
                             onScanFailure
                         );
+                        console.log('[SCANNER] Mobile environment camera started successfully');
                         return;
                     } catch (e) {
-                        console.warn('[SCANNER] environment camera failed:', e);
+                        console.warn('[SCANNER] Exact environment failed, trying ideal:', e);
+                        try {
+                            await html5QrRef.current.start(
+                                { 
+                                    facingMode: { ideal: 'environment' }
+                                },
+                                config,
+                                onScanSuccess,
+                                onScanFailure
+                            );
+                            console.log('[SCANNER] Mobile ideal environment camera started');
+                            return;
+                        } catch (e2) {
+                            console.warn('[SCANNER] Ideal environment failed, trying basic:', e2);
+                            await html5QrRef.current.start(
+                                { 
+                                    facingMode: 'environment'
+                                },
+                                config,
+                                onScanSuccess,
+                                onScanFailure
+                            );
+                            console.log('[SCANNER] Mobile basic environment camera started');
+                            return;
+                        }
                     }
                 }
 
+                // For desktop, try camera enumeration
+                console.log('[SCANNER] Desktop mode - getting cameras');
                 let cameras: Array<{ id: string; label: string }> = [];
                 try {
                     cameras = await Html5Qrcode.getCameras();
-                } catch {
+                    console.log('[SCANNER] Found cameras:', cameras);
+                } catch (e) {
+                    console.warn('[SCANNER] getCameras failed:', e);
                     cameras = [];
                 }
 
@@ -186,6 +244,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     });
 
                     const selectedCamera = backCamera || cameras[cameras.length - 1];
+                    console.log('[SCANNER] Selected camera:', selectedCamera);
 
                     try {
                         await html5QrRef.current.start(
@@ -194,12 +253,15 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                             onScanSuccess,
                             onScanFailure
                         );
+                        console.log('[SCANNER] Camera started successfully');
                         return;
                     } catch (e) {
                         console.warn('[SCANNER] camera ID failed:', e);
                     }
                 }
 
+                // Fallback
+                console.log('[SCANNER] Using fallback camera');
                 try {
                     await html5QrRef.current.start(
                         { facingMode: 'environment' },
@@ -221,10 +283,10 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
 
             } catch (err: any) {
                 console.error('[SCANNER] Initialization failed:', err);
-                if (isMounted) {
+                if (isScanningRef.current) {
                     setResult({
                         success: false,
-                        message: 'Camera access denied. Please enable camera permissions.',
+                        message: 'Camera access denied. Please enable camera permissions in your browser settings.',
                     });
                     setScanning(false);
                 }
@@ -234,7 +296,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
         setupScanner();
 
         return () => {
-            isMounted = false;
+            isScanningRef.current = false;
             isCleaningUpRef.current = true;
             const inst = html5QrRef.current;
             if (!inst) return;
