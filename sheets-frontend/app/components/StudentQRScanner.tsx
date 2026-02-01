@@ -36,13 +36,13 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
     const onScanSuccess = useCallback(async (decodedText: string) => {
         if (processing || isCleaningUpRef.current) return;
         setProcessing(true);
-    
+
         console.log('[STUDENT SCANNER] ='.repeat(30));
         console.log('[STUDENT SCANNER] QR Code Scanned (RAW):', decodedText);
-    
+
         try {
             let qrData: { class_id: string; date: string; code: string };
-    
+
             try {
                 qrData = JSON.parse(decodedText);
                 console.log('[STUDENT SCANNER] ✅ Parsed QR data:', qrData);
@@ -55,7 +55,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 setProcessing(false);
                 return;
             }
-    
+
             if (!qrData.class_id || !qrData.date || !qrData.code) {
                 console.error('[STUDENT SCANNER] ❌ Missing required fields');
                 setResult({
@@ -65,7 +65,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 setProcessing(false);
                 return;
             }
-    
+
             if (qrData.class_id !== selectedClass) {
                 console.error('[STUDENT SCANNER] ❌ Class mismatch');
                 setResult({
@@ -75,11 +75,11 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 setProcessing(false);
                 return;
             }
-    
+
             const token = typeof window !== 'undefined'
                 ? localStorage.getItem('access_token')
                 : null;
-    
+
             if (!token) {
                 console.error('[STUDENT SCANNER] ❌ No token found');
                 setResult({
@@ -89,12 +89,12 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 setProcessing(false);
                 return;
             }
-    
+
             console.log('[STUDENT SCANNER] 📤 Sending to backend...');
-    
+
             const qrCodeString = decodedText;
             const url = `${process.env.NEXT_PUBLIC_API_URL}/qr/scan?class_id=${qrData.class_id}&qr_code=${encodeURIComponent(qrCodeString)}`;
-    
+
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -102,26 +102,26 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     'Content-Type': 'application/json'
                 },
             });
-    
+
             const data = await response.json();
             console.log('[STUDENT SCANNER] 📥 Response:', data);
-    
+
             if (!response.ok) {
                 throw new Error(data.detail || 'Failed to mark attendance');
             }
-    
+
             console.log('[STUDENT SCANNER] ✅ SUCCESS!');
             
-            // Show success message while camera is still running
+            // Show success message (camera stays on)
             setResult({ success: true, message: data.message || 'Attendance marked successfully!' });
             
-            // Wait a bit to show the success message, then close everything smoothly
+            // Close everything smoothly after 2 seconds
             setTimeout(() => {
                 setScanning(false);
                 setProcessing(false);
                 onClose();
-            }, 2000); // Reduced to 2 seconds for smoother experience
-    
+            }, 2000);
+
         } catch (error: any) {
             console.error('[STUDENT SCANNER] ❌ Error:', error);
             setResult({
@@ -133,7 +133,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
             console.log('[STUDENT SCANNER] ='.repeat(30));
         }
     }, [processing, selectedClass, onClose]);
-    
+
     const onScanFailure = useCallback((_error: string) => {
         // Ignore scan failures
     }, []);
@@ -149,7 +149,6 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
 
         const setupScanner = async () => {
             try {
-                // Add a small delay to ensure DOM is ready
                 await new Promise(resolve => setTimeout(resolve, 100));
 
                 const regionId = 'qr-reader';
@@ -162,7 +161,6 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
 
                 if (!isScanningRef.current) return;
 
-                // Clean up any existing instance first
                 if (html5QrRef.current) {
                     try {
                         await html5QrRef.current.stop();
@@ -190,14 +188,11 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
                 console.log('[SCANNER] Is mobile:', isMobile);
 
-                // For mobile, ONLY use facingMode constraints
                 if (isMobile) {
                     console.log('[SCANNER] Starting with mobile environment camera');
                     try {
                         await html5QrRef.current.start(
-                            { 
-                                facingMode: { exact: 'environment' }
-                            },
+                            { facingMode: { exact: 'environment' } },
                             config,
                             onScanSuccess,
                             onScanFailure
@@ -208,9 +203,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                         console.warn('[SCANNER] Exact environment failed, trying ideal:', e);
                         try {
                             await html5QrRef.current.start(
-                                { 
-                                    facingMode: { ideal: 'environment' }
-                                },
+                                { facingMode: { ideal: 'environment' } },
                                 config,
                                 onScanSuccess,
                                 onScanFailure
@@ -220,9 +213,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                         } catch (e2) {
                             console.warn('[SCANNER] Ideal environment failed, trying basic:', e2);
                             await html5QrRef.current.start(
-                                { 
-                                    facingMode: 'environment'
-                                },
+                                { facingMode: 'environment' },
                                 config,
                                 onScanSuccess,
                                 onScanFailure
@@ -233,7 +224,6 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     }
                 }
 
-                // For desktop, try camera enumeration
                 console.log('[SCANNER] Desktop mode - getting cameras');
                 let cameras: Array<{ id: string; label: string }> = [];
                 try {
@@ -267,7 +257,6 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     }
                 }
 
-                // Fallback
                 console.log('[SCANNER] Using fallback camera');
                 try {
                     await html5QrRef.current.start(
@@ -364,26 +353,6 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 </div>
 
                 <div className="p-4 md:p-6 space-y-4 md:space-y-6 overflow-y-auto flex-1">
-                    {result && (
-                        <div className={`rounded-xl p-3 md:p-4 border-2 ${result.success ? 'bg-emerald-50 border-emerald-500' : 'bg-rose-50 border-rose-500'}`}>
-                            <div className="flex items-center gap-3">
-                                {result.success ? (
-                                    <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-emerald-600 flex-shrink-0" />
-                                ) : (
-                                    <AlertCircle className="w-5 h-5 md:w-6 md:h-6 text-rose-600 flex-shrink-0" />
-                                )}
-                                <div className="flex-1 min-w-0">
-                                    <p className={`font-semibold text-sm md:text-base ${result.success ? 'text-emerald-900' : 'text-rose-900'}`}>
-                                        {result.success ? 'Success!' : 'Error'}
-                                    </p>
-                                    <p className={`text-xs md:text-sm ${result.success ? 'text-emerald-700' : 'text-rose-700'}`}>
-                                        {result.message}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
                     {!scanning ? (
                         <div className="space-y-4">
                             <div>
@@ -490,9 +459,32 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            <div className="w-full max-w-md mx-auto">
+                            <div className="w-full max-w-md mx-auto relative">
                                 <div className="relative aspect-square bg-black rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
                                     <div id="qr-reader" className="absolute inset-0" />
+                                    
+                                    {/* Success/Error Overlay */}
+                                    {result && (
+                                        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-10 p-4">
+                                            <div className={`rounded-xl p-4 md:p-6 border-2 ${result.success ? 'bg-emerald-50 border-emerald-500' : 'bg-rose-50 border-rose-500'} max-w-sm w-full`}>
+                                                <div className="flex flex-col items-center gap-3 text-center">
+                                                    {result.success ? (
+                                                        <CheckCircle className="w-12 h-12 md:w-16 md:h-16 text-emerald-600" />
+                                                    ) : (
+                                                        <AlertCircle className="w-12 h-12 md:w-16 md:h-16 text-rose-600" />
+                                                    )}
+                                                    <div>
+                                                        <p className={`font-bold text-lg md:text-xl mb-1 ${result.success ? 'text-emerald-900' : 'text-rose-900'}`}>
+                                                            {result.success ? 'Success!' : 'Error'}
+                                                        </p>
+                                                        <p className={`text-sm md:text-base ${result.success ? 'text-emerald-700' : 'text-rose-700'}`}>
+                                                            {result.message}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
