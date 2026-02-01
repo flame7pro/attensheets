@@ -35,14 +35,24 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
 
     const onScanSuccess = useCallback(async (decodedText: string) => {
         if (processing || isCleaningUpRef.current) return;
+        
+        // Stop the scanner IMMEDIATELY to prevent multiple scans
+        if (html5QrRef.current) {
+            try {
+                await html5QrRef.current.stop();
+            } catch (e) {
+                console.warn('[SCANNER] Stop failed:', e);
+            }
+        }
+        
         setProcessing(true);
-
+    
         console.log('[STUDENT SCANNER] ='.repeat(30));
         console.log('[STUDENT SCANNER] QR Code Scanned (RAW):', decodedText);
-
+    
         try {
             let qrData: { class_id: string; date: string; code: string };
-
+    
             try {
                 qrData = JSON.parse(decodedText);
                 console.log('[STUDENT SCANNER] ✅ Parsed QR data:', qrData);
@@ -55,7 +65,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 setProcessing(false);
                 return;
             }
-
+    
             if (!qrData.class_id || !qrData.date || !qrData.code) {
                 console.error('[STUDENT SCANNER] ❌ Missing required fields');
                 setResult({
@@ -65,7 +75,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 setProcessing(false);
                 return;
             }
-
+    
             if (qrData.class_id !== selectedClass) {
                 console.error('[STUDENT SCANNER] ❌ Class mismatch');
                 setResult({
@@ -75,11 +85,11 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 setProcessing(false);
                 return;
             }
-
+    
             const token = typeof window !== 'undefined'
                 ? localStorage.getItem('access_token')
                 : null;
-
+    
             if (!token) {
                 console.error('[STUDENT SCANNER] ❌ No token found');
                 setResult({
@@ -89,12 +99,12 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 setProcessing(false);
                 return;
             }
-
+    
             console.log('[STUDENT SCANNER] 📤 Sending to backend...');
-
+    
             const qrCodeString = decodedText;
             const url = `${process.env.NEXT_PUBLIC_API_URL}/qr/scan?class_id=${qrData.class_id}&qr_code=${encodeURIComponent(qrCodeString)}`;
-
+    
             const response = await fetch(url, {
                 method: 'POST',
                 headers: {
@@ -102,19 +112,25 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     'Content-Type': 'application/json'
                 },
             });
-
+    
             const data = await response.json();
             console.log('[STUDENT SCANNER] 📥 Response:', data);
-
+    
             if (!response.ok) {
                 throw new Error(data.detail || 'Failed to mark attendance');
             }
-
+    
             console.log('[STUDENT SCANNER] ✅ SUCCESS!');
             setResult({ success: true, message: data.message || 'Attendance marked successfully!' });
-
-            stopScanning();
-            setTimeout(onClose, 3000);
+    
+            // Use setTimeout to avoid React transition issues
+            setTimeout(() => {
+                stopScanning();
+            }, 100);
+            
+            setTimeout(() => {
+                onClose();
+            }, 3000);
         } catch (error: any) {
             console.error('[STUDENT SCANNER] ❌ Error:', error);
             setResult({
@@ -126,7 +142,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
             console.log('[STUDENT SCANNER] ='.repeat(30));
         }
     }, [processing, selectedClass, stopScanning, onClose]);
-
+    
     const onScanFailure = useCallback((_error: string) => {
         // Ignore scan failures
     }, []);
