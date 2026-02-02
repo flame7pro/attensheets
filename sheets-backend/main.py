@@ -172,16 +172,23 @@ class SessionAttendanceUpdate(BaseModel):
     session_id: str
     student_id: str
     status: str
-
+    
 class SessionData(BaseModel):
     id: str
     name: str
-    status: Optional[str] = None  # Allows null
+    status: Optional[str] = None  # Can be None, 'P', 'A', or 'L'
+    
+    class Config:
+        extra = "allow"
+        validate_assignment = True
 
 class MultiSessionAttendanceUpdate(BaseModel):
     student_id: int
     date: str
     sessions: List[SessionData]
+    
+    class Config:
+        extra = "allow"
 
 # ==================== HELPER FUNCTIONS ====================
 
@@ -1787,23 +1794,17 @@ async def update_class(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to update class: {str(e)}")
 
-@app.put("/classes/{class_id}/multi-session-attendance")
-async def update_multi_session_attendance(
-    class_id: str,
-    request: MultiSessionAttendanceUpdate,
-    email: str = Depends(verify_token)
-):
-    """
-    Update multi-session attendance for a student on a specific date.
-    Stores sessions array in the new format: { sessions: [...], updated_at: ... }
-    """
-    print(f"\n{'='*60}")
-    print(f"[MULTI_SESSION] Update request")
-    print(f"  Class ID: {class_id}")
-    print(f"  Student ID: {request.student_id}")
-    print(f"  Date: {request.date}")
-    print(f"  Sessions: {len(request.sessions)}")
-    for idx, session in enumerate(request.sessions):
+request.date}")
+    print(f"  Sessions received: {len(request.sessions)}")
+    
+    # ✅ CRITICAL FIX: Filter out null sessions IMMEDIATELY
+    valid_sessions = [
+        s for s in request.sessions 
+        if s.status is not None and s.status in ['P', 'A', 'L']
+    ]
+    
+    print(f"  Valid sessions (non-null): {len(valid_sessions)}")
+    for idx, session in enumerate(valid_sessions):
         print(f"    Session {idx + 1}: {session.id} - {session.name} - {session.status}")
     print(f"{'='*60}")
     
@@ -1817,12 +1818,10 @@ async def update_multi_session_attendance(
         user_id = user["id"]
         print(f"[MULTI_SESSION] ✅ User found: {user_id}")
         
-        # Get class data - using MongoDB-aware method
+        # Get class data - MongoDB-aware
         if DB_TYPE == "mongodb":
-            # MongoDB stores class_id as int or Int64
             class_data = db.get_class(user_id, class_id)
         else:
-            # File-based storage
             class_file = db.get_class_file(user_id, class_id)
             class_data = db.read_json(class_file)
         
@@ -1846,27 +1845,27 @@ async def update_multi_session_attendance(
                 if "attendance" not in student:
                     student["attendance"] = {}
                 
-                # Store in NEW format: { sessions: [...], updated_at: ... }
-                # ✅ FIX: Only include sessions with non-null status
-                valid_sessions = [
-                    {
-                        "id": session.id,
-                        "name": session.name,
-                        "status": session.status
+                # ✅ Store ONLY valid sessions (those with non-null status)
+                if valid_sessions:
+                    student["attendance"][request.date] = {
+                        "sessions": [
+                            {
+                                "id": session.id,
+                                "name": session.name,
+                                "status": session.status
+                            }
+                            for session in valid_sessions
+                        ],
+                        "updated_at": datetime.now(timezone.utc).isoformat()
                     }
-                    for session in request.sessions
-                    if session.status is not None  # ✅ CRITICAL FIX
-                ]
+                    print(f"[MULTI_SESSION] ✅ Updated student {request.student_id}")
+                    print(f"  Valid sessions stored: {len(valid_sessions)}")
+                else:
+                    # No valid sessions - remove the date entry if it exists
+                    if request.date in student["attendance"]:
+                        del student["attendance"][request.date]
+                        print(f"[MULTI_SESSION] ℹ️ No valid sessions - removed date entry")
                 
-                student["attendance"][request.date] = {
-                    "sessions": valid_sessions,
-                    "updated_at": datetime.now(timezone.utc).isoformat()
-                }
-                
-                print(f"[MULTI_SESSION] Updated student {request.student_id}")
-                print(f"  Valid sessions stored: {len(valid_sessions)}")
-                for idx, s in enumerate(valid_sessions):
-                    print(f"    Session {idx + 1}: {s['id']} - {s['name']} - {s['status']}")
                 break
         
         if not student_found:
@@ -1888,7 +1887,6 @@ async def update_multi_session_attendance(
         class_data["updated_at"] = datetime.now(timezone.utc).isoformat()
         
         if DB_TYPE == "mongodb":
-            # Use MongoDB update
             stored_class_id = class_data.get("id")
             db.classes.update_one(
                 {"teacher_id": user_id, "id": stored_class_id},
@@ -1896,7 +1894,6 @@ async def update_multi_session_attendance(
             )
             print(f"[MULTI_SESSION] ✅ MongoDB update complete")
         else:
-            # Use file-based update
             db.write_json(class_file, class_data)
             print(f"[MULTI_SESSION] ✅ File update complete")
         
