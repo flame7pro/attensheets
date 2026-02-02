@@ -459,77 +459,59 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            <div className="w-full max-w-md mx-auto relative">
+                            {/* QR Reader */}
+                            <div className="w-full max-w-md mx-auto">
                                 <div className="relative aspect-square rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
                                     <div id="qr-reader" className="absolute inset-0" />
-                                    
-                                    {/* Enhanced Success/Error Overlay with Animation */}
-                                    {result && (
-                                        <div className="absolute inset-0 bg-gradient-to-br from-black/80 via-black/70 to-black/80 backdrop-blur-md flex items-center justify-center z-10 p-4 animate-fadeIn">
-                                            <div className={`
-                                                relative rounded-2xl p-6 md:p-8 shadow-2xl max-w-sm w-full
-                                                ${result.success 
-                                                    ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-2 border-emerald-400' 
-                                                    : 'bg-gradient-to-br from-rose-50 to-red-50 border-2 border-rose-400'
-                                                }
-                                                transform transition-all duration-300 ease-out
-                                                animate-scaleIn
-                                            `}>
-                                                {/* Decorative corner elements */}
-                                                <div className={`absolute top-0 left-0 w-16 h-16 ${result.success ? 'bg-emerald-200/30' : 'bg-rose-200/30'} rounded-br-full`} />
-                                                <div className={`absolute bottom-0 right-0 w-16 h-16 ${result.success ? 'bg-emerald-200/30' : 'bg-rose-200/30'} rounded-tl-full`} />
-                                                
-                                                <div className="relative flex flex-col items-center gap-4 text-center">
-                                                    {/* Animated Icon with Pulse Effect */}
-                                                    <div className={`
-                                                        relative
-                                                        ${result.success ? 'animate-successPulse' : 'animate-shake'}
-                                                    `}>
-                                                        {result.success ? (
-                                                            <div className="relative">
-                                                                {/* Glow effect */}
-                                                                <div className="absolute inset-0 bg-emerald-400/30 rounded-full blur-xl animate-pulse" />
-                                                                <CheckCircle className="relative w-16 h-16 md:w-20 md:h-20 text-emerald-600 drop-shadow-lg" strokeWidth={2.5} />
-                                                            </div>
-                                                        ) : (
-                                                            <div className="relative">
-                                                                <div className="absolute inset-0 bg-rose-400/30 rounded-full blur-xl animate-pulse" />
-                                                                <AlertCircle className="relative w-16 h-16 md:w-20 md:h-20 text-rose-600 drop-shadow-lg" strokeWidth={2.5} />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    
-                                                    {/* Text Content */}
-                                                    <div className="space-y-2">
-                                                        <p className={`
-                                                            font-black text-2xl md:text-3xl tracking-tight
-                                                            ${result.success ? 'text-emerald-900' : 'text-rose-900'}
-                                                        `}>
-                                                            {result.success ? '✓ Success!' : '✕ Error'}
-                                                        </p>
-                                                        <p className={`
-                                                            text-sm md:text-base font-medium leading-relaxed
-                                                            ${result.success ? 'text-emerald-800' : 'text-rose-800'}
-                                                        `}>
-                                                            {result.message}
-                                                        </p>
-                                                        
-                                                        {/* Progress indicator for success */}
-                                                        {result.success && (
-                                                            <div className="mt-4 space-y-2">
-                                                                <p className="text-xs text-emerald-700/80">Closing automatically...</p>
-                                                                <div className="w-full bg-emerald-200 rounded-full h-1.5 overflow-hidden">
-                                                                    <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full animate-progressBar" />
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
+
+                            {/* Modern Success/Error Notification - Below Scanner */}
+                            {result && (
+                                <div className="w-full max-w-md mx-auto animate-slideUp">
+                                    <div className={`
+                                        relative rounded-2xl p-4 shadow-2xl backdrop-blur-md border-2
+                                        ${result.success 
+                                            ? 'bg-emerald-500/95 border-emerald-400' 
+                                            : 'bg-rose-500/95 border-rose-400'
+                                        }
+                                    `}>
+                                        <div className="flex items-start gap-3">
+                                            {/* Icon */}
+                                            <div className={`flex-shrink-0 ${result.success ? 'animate-bounceIn' : 'animate-shake'}`}>
+                                                {result.success ? (
+                                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center">
+                                                        <CheckCircle className="w-6 h-6 text-emerald-600" strokeWidth={2.5} />
+                                                    </div>
+                                                ) : (
+                                                    <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center">
+                                                        <AlertCircle className="w-6 h-6 text-rose-600" strokeWidth={2.5} />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            
+                                            {/* Content */}
+                                            <div className="flex-1 min-w-0 pt-0.5">
+                                                <p className="font-bold text-white text-base mb-1">
+                                                    {result.success ? 'Success!' : 'Error'}
+                                                </p>
+                                                <p className="text-sm text-white/90 leading-snug">
+                                                    {result.message}
+                                                </p>
+                                                
+                                                {/* Progress bar for success */}
+                                                {result.success && (
+                                                    <div className="mt-3">
+                                                        <div className="w-full bg-white/30 rounded-full h-1 overflow-hidden">
+                                                            <div className="h-full bg-white rounded-full animate-progressBar" />
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             <style jsx global>{`
                                 #qr-reader video {
@@ -547,32 +529,26 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                                     min-height: 100% !important;
                                 }
                                 
-                                @keyframes fadeIn {
+                                @keyframes slideUp {
                                     from {
+                                        transform: translateY(20px);
                                         opacity: 0;
                                     }
                                     to {
+                                        transform: translateY(0);
                                         opacity: 1;
                                     }
                                 }
                                 
-                                @keyframes scaleIn {
-                                    from {
-                                        transform: scale(0.8);
-                                        opacity: 0;
-                                    }
-                                    to {
-                                        transform: scale(1);
-                                        opacity: 1;
-                                    }
-                                }
-                                
-                                @keyframes successPulse {
-                                    0%, 100% {
-                                        transform: scale(1);
+                                @keyframes bounceIn {
+                                    0% {
+                                        transform: scale(0);
                                     }
                                     50% {
-                                        transform: scale(1.1);
+                                        transform: scale(1.2);
+                                    }
+                                    100% {
+                                        transform: scale(1);
                                     }
                                 }
                                 
@@ -581,10 +557,10 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                                         transform: translateX(0);
                                     }
                                     25% {
-                                        transform: translateX(-10px);
+                                        transform: translateX(-8px);
                                     }
                                     75% {
-                                        transform: translateX(10px);
+                                        transform: translateX(8px);
                                     }
                                 }
                                 
@@ -597,20 +573,16 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                                     }
                                 }
                                 
-                                .animate-fadeIn {
-                                    animation: fadeIn 0.3s ease-out;
+                                .animate-slideUp {
+                                    animation: slideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
                                 }
                                 
-                                .animate-scaleIn {
-                                    animation: scaleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-                                }
-                                
-                                .animate-successPulse {
-                                    animation: successPulse 0.6s ease-in-out;
+                                .animate-bounceIn {
+                                    animation: bounceIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
                                 }
                                 
                                 .animate-shake {
-                                    animation: shake 0.5s ease-in-out;
+                                    animation: shake 0.4s ease-in-out;
                                 }
                                 
                                 .animate-progressBar {
