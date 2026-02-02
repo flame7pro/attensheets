@@ -1808,9 +1808,9 @@ async def update_class(
 
 @app.put("/classes/{class_id}/multi-session-attendance")
 async def update_multi_session_attendance(
-    class_id: int,
+    class_id: str,  # ✅ Changed to str
     request: MultiSessionAttendanceUpdate,
-    current_user: dict = Depends(verify_token)
+    email: str = Depends(verify_token)  # ✅ Get email from token
 ):
     try:
         print("\n" + "="*80)
@@ -1820,6 +1820,11 @@ async def update_multi_session_attendance(
         print(f"  Date: {request.date}")
         print(f"  Raw sessions: {request.sessions}")
         print("="*80 + "\n")
+        
+        # ✅ Get user from email
+        user = db.get_user_by_email(email)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
         
         # ✅ Filter out sessions with null status
         valid_sessions = [
@@ -1835,8 +1840,8 @@ async def update_multi_session_attendance(
                 detail="No valid sessions provided. At least one session must have P, A, or L status."
             )
         
-        # Get existing class data
-        class_data = await get_class_from_db(class_id, current_user['id'])
+        # ✅ Get existing class data using MongoDB manager
+        class_data = db.get_class(user["id"], str(class_id))
         if not class_data:
             raise HTTPException(status_code=404, detail="Class not found")
         
@@ -1923,8 +1928,10 @@ async def update_multi_session_attendance(
             'excellentCount': 0
         }
         
-        # Save to database
-        await save_class_to_db(class_id, class_data, current_user['id'])
+        # ✅ Save to database using MongoDB manager
+        class_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+        class_file = db.get_class_file(user["id"], str(class_id))
+        db.write_json(class_file, class_data)
         
         print(f"[MULTI_SESSION] ✅ Successfully saved multi-session attendance")
         
