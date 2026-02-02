@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List, Dict, Any
 import json
 import os
@@ -176,12 +176,39 @@ class SessionAttendanceUpdate(BaseModel):
 class SessionData(BaseModel):
     id: str
     name: str
-    status: str  # 'P', 'A', or 'L'
+    status: Optional[str] = None  # ✅ FIX: Make status optional (can be null)
+    
+    @field_validator('status')
+    @classmethod
+    def validate_status(cls, v):
+        """Validate that status is either None or one of P/A/L"""
+        if v is not None and v not in ['P', 'A', 'L']:
+            raise ValueError('Status must be P, A, L, or null')
+        return v
 
 class MultiSessionAttendanceUpdate(BaseModel):
     student_id: int
     date: str  # YYYY-MM-DD
     sessions: List[SessionData]
+    
+    @field_validator('sessions')
+    @classmethod
+    def validate_sessions(cls, v):
+        """Ensure we have at least one session"""
+        if not v or len(v) == 0:
+            raise ValueError('At least one session is required')
+        return v
+    
+    @field_validator('date')
+    @classmethod
+    def validate_date(cls, v):
+        """Validate date format"""
+        from datetime import datetime
+        try:
+            datetime.strptime(v, '%Y-%m-%d')
+        except ValueError:
+            raise ValueError('Date must be in YYYY-MM-DD format')
+        return v
 
 # ==================== HELPER FUNCTIONS ====================
 
