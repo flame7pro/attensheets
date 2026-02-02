@@ -52,7 +52,11 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     success: false,
                     message: 'Invalid QR code format',
                 });
-                setProcessing(false);
+                // Allow retry after 2 seconds
+                setTimeout(() => {
+                    setResult(null);
+                    setProcessing(false);
+                }, 2000);
                 return;
             }
 
@@ -62,7 +66,10 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     success: false,
                     message: 'Invalid QR code - missing required data',
                 });
-                setProcessing(false);
+                setTimeout(() => {
+                    setResult(null);
+                    setProcessing(false);
+                }, 2000);
                 return;
             }
 
@@ -72,7 +79,10 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     success: false,
                     message: 'This QR code is for a different class!',
                 });
-                setProcessing(false);
+                setTimeout(() => {
+                    setResult(null);
+                    setProcessing(false);
+                }, 2000);
                 return;
             }
 
@@ -86,7 +96,10 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     success: false,
                     message: 'Please login again.',
                 });
-                setProcessing(false);
+                setTimeout(() => {
+                    setResult(null);
+                    setProcessing(false);
+                }, 2000);
                 return;
             }
 
@@ -112,13 +125,12 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
 
             console.log('[STUDENT SCANNER] ✅ SUCCESS!');
             
-            // Show success message (camera stays on)
+            // Show success message (camera stays on - no flicker)
             setResult({ success: true, message: data.message || 'Attendance marked successfully!' });
             
             // Close everything smoothly after 2.5 seconds
             setTimeout(() => {
-                setScanning(false);
-                setProcessing(false);
+                stopScanning();
                 onClose();
             }, 2500);
 
@@ -128,11 +140,14 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 success: false,
                 message: error.message || 'Failed to scan QR code',
             });
-            setProcessing(false);
+            setTimeout(() => {
+                setResult(null);
+                setProcessing(false);
+            }, 2000);
         } finally {
             console.log('[STUDENT SCANNER] ='.repeat(30));
         }
-    }, [processing, selectedClass, onClose]);
+    }, [processing, selectedClass, onClose, stopScanning]);
 
     const onScanFailure = useCallback((_error: string) => {
         // Ignore scan failures
@@ -141,6 +156,11 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
     useEffect(() => {
         if (!scanning) {
             isScanningRef.current = false;
+            return;
+        }
+
+        // Don't re-initialize if already scanning
+        if (isScanningRef.current && html5QrRef.current) {
             return;
         }
 
