@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -171,12 +170,21 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         return;
       }
   
-      console.log('[MULTI_SESSION] Saving to backend...');
+      // ✅ Log what we're about to send
+      console.log('[MULTI_SESSION] Preparing to send:');
       console.log('  Student ID:', selectedStudent);
       console.log('  Date:', multiSessionDate);
-      console.log('  All Sessions (including nulls):', sessions);
+      console.log('  Sessions:', JSON.stringify(sessions, null, 2));
   
-      // ✅ CRITICAL FIX: Send ALL sessions (backend will filter nulls)
+      // ✅ SEND ALL SESSIONS (including nulls) - backend filters them
+      const payload = {
+        student_id: selectedStudent,
+        date: multiSessionDate,
+        sessions: sessions  // ✅ Send everything!
+      };
+  
+      console.log('[MULTI_SESSION] Full payload:', JSON.stringify(payload, null, 2));
+  
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/classes/${activeClass.id}/multi-session-attendance`,
         {
@@ -185,15 +193,12 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            student_id: selectedStudent,
-            date: multiSessionDate,
-            sessions: sessions  // ✅ Send ALL sessions, not filtered!
-          })
+          body: JSON.stringify(payload)
         }
       );
   
-      // ✅ Check if backend save succeeded
+      console.log('[MULTI_SESSION] Response status:', response.status);
+  
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
         console.error('[MULTI_SESSION] Backend error:', errorData);
@@ -201,7 +206,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       }
   
       const result = await response.json();
-      console.log('[MULTI_SESSION] Backend saved successfully:', result);
+      console.log('[MULTI_SESSION] ✅ Backend saved successfully:', result);
   
       // ✅ Update local state with backend response
       if (result.class) {
@@ -210,7 +215,6 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         console.log('[MULTI_SESSION] Updated from backend response');
       } else {
         // Fallback: Calculate locally if backend doesn't return full class
-        // Filter valid sessions for local state
         const validSessions = sessions.filter(s => s.status !== null);
         
         const updatedClass: Class = {
@@ -301,7 +305,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       // ✅ Don't close modal on error - let user retry
     }
   };
-  
+    
   const handleCloseMultiSession = () => {
     setShowMultiSessionModal(false);
     setSelectedDay(null);
