@@ -176,11 +176,23 @@ class SessionAttendanceUpdate(BaseModel):
 class SessionData(BaseModel):
     id: str
     name: str
-    status: Optional[str] = None  # Can be None, 'P', 'A', or 'L'
+    status: Optional[str] = None  # ✅ This allows null
     
     class Config:
         extra = "allow"
         validate_assignment = True
+
+    @field_validator('status')
+    @classmethod
+    def validate_status(cls, v):
+        # ✅ Allow None/null values
+        if v is None:
+            return None
+        # ✅ Only validate if value is provided
+        if v not in ['P', 'A', 'L']:
+            raise ValueError('Status must be P, A, L, or null')
+        return v
+
 
 class MultiSessionAttendanceUpdate(BaseModel):
     student_id: int
@@ -1796,132 +1808,136 @@ async def update_class(
 
 @app.put("/classes/{class_id}/multi-session-attendance")
 async def update_multi_session_attendance(
-    class_id: str,
+    class_id: int,
     request: MultiSessionAttendanceUpdate,
-    email: str = Depends(verify_token)
+    current_user: dict = Depends(verify_token)
 ):
-    """Update multi-session attendance"""
-    
-    print(f"\n{'='*60}")
-    print(f"[MULTI_SESSION] Update request")
-    print(f"  Class ID: {class_id}")
-    print(f"  Student ID: {request.student_id}")
-    print(f"  Date: {request.date}")
-    print(f"  Sessions received: {len(request.sessions)}")
-    
-    # Filter valid sessions
-    valid_sessions = [
-        s for s in request.sessions 
-        if s.status is not None and s.status in ['P', 'A', 'L']
-    ]
-    
-    print(f"  Valid sessions (non-null): {len(valid_sessions)}")
-    for idx, session in enumerate(valid_sessions):
-        print(f"    Session {idx + 1}: {session.id} - {session.name} - {session.status}")
-    print(f"{'='*60}")
-    
     try:
-        user = db.get_user_by_email(email)
-        if not user:
-            print(f"[MULTI_SESSION] User not found: {email}")
-            raise HTTPException(status_code=404, detail="User not found")
+        print("\n" + "="*80)
+        print("[MULTI_SESSION] REQUEST RECEIVED")
+        print(f"  Class ID: {class_id}")
+        print(f"  Student ID: {request.student_id}")
+        print(f"  Date: {request.date}")
+        print(f"  Raw sessions: {request.sessions}")
+        print("="*80 + "\n")
         
-        user_id = user["id"]
-        print(f"[MULTI_SESSION] User found: {user_id}")
+        # ✅ Filter out sessions with null status
+        valid_sessions = [
+            s for s in request.sessions 
+            if s.status is not None and s.status in ['P', 'A', 'L']
+        ]
         
-        # Get class data
-        if DB_TYPE == "mongodb":
-            class_data = db.get_class(user_id, class_id)
-        else:
-            class_file = db.get_class_file(user_id, class_id)
-            class_data = db.read_json(class_file)
+        print(f"[MULTI_SESSION] Valid sessions after filtering: {valid_sessions}")
         
+        if not valid_sessions:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid sessions provided. At least one session must have P, A, or L status."
+            )
+        
+        # Get existing class data
+        class_data = await get_class_from_db(class_id, current_user['id'])
         if not class_data:
-            print(f"[MULTI_SESSION] Class not found: {class_id}")
             raise HTTPException(status_code=404, detail="Class not found")
         
-        print(f"[MULTI_SESSION] Class found: {class_data.get('name')}")
-        
         # Find student
-        students = class_data.get("students", [])
         student_found = False
-        student_index = None
-        
-        for idx, student in enumerate(students):
-            if student.get("id") == request.student_id:
+        for student in class_data['students']:
+            if student['id'] == request.student_id:
                 student_found = True
-                student_index = idx
                 
-                if "attendance" not in student:
-                    student["attendance"] = {}
+                # Initialize attendance dict if needed
+                if 'attendance' not in student:
+                    student['attendance'] = {}
                 
-                # Store valid sessions only
-                if valid_sessions:
-                    student["attendance"][request.date] = {
-                        "sessions": [
-                            {
-                                "id": session.id,
-                                "name": session.name,
-                                "status": session.status
-                            }
-                            for session in valid_sessions
-                        ],
-                        "updated_at": datetime.now(timezone.utc).isoformat()
-                    }
-                    print(f"[MULTI_SESSION] Updated student {request.student_id}")
-                    print(f"  Valid sessions stored: {len(valid_sessions)}")
-                else:
-                    if request.date in student["attendance"]:
-                        del student["attendance"][request.date]
-                        print(f"[MULTI_SESSION] No valid sessions - removed date entry")
+                # ✅ Save sessions in NEW FORMAT
+                student['attendance'][request.date] = {
+                    'sessions': [
+                        {
+                            'id': s.id,
+                            'name': s.name,
+                            'status': s.status
+                        }
+                        for s in valid_sessions
+                    ],
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                }
                 
+                print(f"[MULTI_SESSION] Updated attendance for student {request.student_id} on {request.date}")
+                print(f"[MULTI_SESSION] Saved data: {student['attendance'][request.date]}")
                 break
         
         if not student_found:
-            print(f"[MULTI_SESSION] Student not found: {request.student_id}")
-            raise HTTPException(status_code=404, detail="Student not found in class")
-        
-        # Update students
-        students[student_index] = students[student_index]
-        class_data["students"] = students
-        
-        # Recalculate stats
-        if DB_TYPE == "mongodb":
-            rel_class_id = db._class_rel_id(class_data.get("id"))
-            class_data["statistics"] = db.calculate_class_statistics(class_data, rel_class_id)
-        else:
-            class_data["statistics"] = db.calculate_class_statistics(class_data, class_id)
-        
-        # Save
-        class_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-        
-        if DB_TYPE == "mongodb":
-            stored_class_id = class_data.get("id")
-            db.classes.update_one(
-                {"teacher_id": user_id, "id": stored_class_id},
-                {"$set": class_data}
+            raise HTTPException(
+                status_code=404,
+                detail=f"Student with ID {request.student_id} not found in class {class_id}"
             )
-            print(f"[MULTI_SESSION] MongoDB update complete")
-        else:
-            db.write_json(class_file, class_data)
-            print(f"[MULTI_SESSION] File update complete")
         
-        # Update overview
-        db.update_user_overview(user_id)
+        # Recalculate statistics
+        total_present = 0
+        total_absent = 0
+        total_late = 0
+        total_sessions = 0
         
-        print(f"[MULTI_SESSION] SUCCESS")
-        print(f"{'='*60}\n")
+        for student in class_data['students']:
+            if 'attendance' in student:
+                for date_key, attendance_data in student['attendance'].items():
+                    if isinstance(attendance_data, dict) and 'sessions' in attendance_data:
+                        # NEW FORMAT
+                        for session in attendance_data['sessions']:
+                            total_sessions += 1
+                            if session['status'] == 'P':
+                                total_present += 1
+                            elif session['status'] == 'A':
+                                total_absent += 1
+                            elif session['status'] == 'L':
+                                total_late += 1
+                    elif isinstance(attendance_data, dict) and 'status' in attendance_data:
+                        # OLD FORMAT
+                        count = attendance_data.get('count', 1)
+                        total_sessions += count
+                        if attendance_data['status'] == 'P':
+                            total_present += count
+                        elif attendance_data['status'] == 'A':
+                            total_absent += count
+                        elif attendance_data['status'] == 'L':
+                            total_late += count
+                    elif isinstance(attendance_data, str):
+                        # VERY OLD FORMAT
+                        total_sessions += 1
+                        if attendance_data == 'P':
+                            total_present += 1
+                        elif attendance_data == 'A':
+                            total_absent += 1
+                        elif attendance_data == 'L':
+                            total_late += 1
+        
+        avg_attendance = 0
+        if total_sessions > 0:
+            avg_attendance = ((total_present + total_late) / total_sessions) * 100
+        
+        class_data['statistics'] = {
+            'totalStudents': len(class_data['students']),
+            'avgAttendance': round(avg_attendance, 3),
+            'atRiskCount': 0,
+            'excellentCount': 0
+        }
+        
+        # Save to database
+        await save_class_to_db(class_id, class_data, current_user['id'])
+        
+        print(f"[MULTI_SESSION] ✅ Successfully saved multi-session attendance")
         
         return {
             "success": True,
-            "message": "Multi-session attendance updated",
+            "message": "Multi-session attendance updated successfully",
             "class": class_data
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[MULTI_SESSION] ERROR: {e}")
+        print(f"[MULTI_SESSION] ❌ Error: {str(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
