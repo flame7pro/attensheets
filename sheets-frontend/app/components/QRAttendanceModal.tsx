@@ -590,14 +590,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                         className="flex-1 flex flex-col items-center justify-center px-3 sm:px-4 md:px-6 py-4 sm:py-6 overflow-y-auto"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Title */}
-                        <h3 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-1.5 sm:mb-2 md:mb-3 text-center">
-                            Scan QR Code
-                        </h3>
-                        <p className="text-xs sm:text-sm md:text-base text-white/80 mb-4 sm:mb-6 md:mb-8 lg:mb-10 text-center px-4 max-w-md">
-                            Point your camera at the code below to mark attendance
-                        </p>
-
+                        
                         {/* QR Code Container - Reduced padding */}
                         <div className="bg-white rounded-xl sm:rounded-2xl md:rounded-3xl p-3 sm:p-4 md:p-5 lg:p-6 shadow-2xl max-w-full">
                             <img 
