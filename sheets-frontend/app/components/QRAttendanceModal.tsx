@@ -592,7 +592,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                             <img 
                                 src={qrCodeUrl} 
                                 alt="QR Code" 
-                                className="w-[200px] h-[200px] sm:w-[240px] sm:h-[240px] md:w-[300px] md:h-[300px] lg:w-[360px] lg:h-[360px] xl:w-[400px] xl:h-[400px] mx-auto"
+                                className="w-[240px] h-[240px] sm:w-[300px] sm:h-[300px] md:w-[380px] md:h-[380px] lg:w-[460px] lg:h-[460px] xl:w-[520px] xl:h-[520px] mx-auto"
                             />
                         </div>
 
