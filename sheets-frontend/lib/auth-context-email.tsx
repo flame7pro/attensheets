@@ -35,7 +35,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 async function apiCall<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+  const token = typeof window !== 'undefined' 
+    ? (sessionStorage.getItem('access_token') || localStorage.getItem('access_token'))
+    : null;
+  
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -69,12 +72,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Check for existing session on mount
   useEffect(() => {
     const checkExistingSession = async () => {
-      const storedToken = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-      const storedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
-      const storedRole = typeof window !== 'undefined' ? localStorage.getItem('user_role') : null;
-      const rememberMe = typeof window !== 'undefined' ? localStorage.getItem('remember_me') === 'true' : false;
+      if (typeof window === 'undefined') {
+        setLoading(false);
+        return;
+      }
 
-      if (storedToken && storedUser && rememberMe) {
+      // Check sessionStorage first (current browser session)
+      let storedToken = sessionStorage.getItem('access_token');
+      let storedUser = sessionStorage.getItem('user');
+      let storedRole = sessionStorage.getItem('user_role');
+      let isSessionStorage = true;
+
+      // If not in sessionStorage, check localStorage (Remember Me was checked)
+      if (!storedToken || !storedUser) {
+        storedToken = localStorage.getItem('access_token');
+        storedUser = localStorage.getItem('user');
+        storedRole = localStorage.getItem('user_role');
+        isSessionStorage = false;
+      }
+
+      if (storedToken && storedUser) {
         try {
           // Verify token is still valid
           const response = await fetch(`${API_URL}/auth/me`, {
@@ -91,39 +108,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setToken(storedToken);
             setUser(userData);
 
+            // If data was only in localStorage (Remember Me), also set in sessionStorage for current session
+            if (!isSessionStorage) {
+              sessionStorage.setItem('access_token', storedToken);
+              sessionStorage.setItem('user', storedUser);
+              if (storedRole) {
+                sessionStorage.setItem('user_role', storedRole);
+              }
+            }
+
             // Auto-redirect to dashboard if on auth page
-            const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+            const currentPath = window.location.pathname;
             if (currentPath === '/auth' || currentPath === '/') {
               const redirectPath = userData.role === 'student' ? '/student/dashboard' : '/dashboard';
               router.push(redirectPath);
             }
           } else {
             // Token invalid, clear everything
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('user');
-            localStorage.removeItem('user_role');
-            localStorage.removeItem('remember_me');
+            clearAllStorage();
           }
         } catch (error) {
           console.error('Session check error:', error);
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('user');
-          localStorage.removeItem('user_role');
-          localStorage.removeItem('remember_me');
-        }
-      } else if (storedToken && storedUser) {
-        // User logged in but didn't check remember me - still set state but don't auto-redirect
-        try {
-          const userData = JSON.parse(storedUser);
-          if (storedRole && !userData.role) {
-            userData.role = storedRole;
-          }
-          setToken(storedToken);
-          setUser(userData);
-        } catch (error) {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('user');
-          localStorage.removeItem('user_role');
+          clearAllStorage();
         }
       }
       
@@ -132,6 +138,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     checkExistingSession();
   }, [router]);
+
+  const clearAllStorage = () => {
+    if (typeof window === 'undefined') return;
+    
+    // Clear sessionStorage
+    sessionStorage.removeItem('access_token');
+    sessionStorage.removeItem('user');
+    sessionStorage.removeItem('user_role');
+    
+    // Clear localStorage
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('user_role');
+    localStorage.removeItem('pending_signup_role');
+  };
 
   const signup = async (email: string, password: string, name: string, role: string = 'teacher') => {
     try {
@@ -145,7 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (typeof window !== 'undefined') {
-        localStorage.setItem('pending_signup_role', role);
+        sessionStorage.setItem('pending_signup_role', role);
       }
 
       const body: any = { email, password, name, role };
@@ -213,15 +234,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Save login data
       const userData = { ...response.user, role };
 
-      localStorage.setItem('access_token', response.access_token);
-      localStorage.setItem('user', JSON.stringify(userData));
-      localStorage.setItem('user_role', role);
-      localStorage.setItem('remember_me', rememberMe.toString());
+      // Always save to sessionStorage (persists during browser session)
+      sessionStorage.setItem('access_token', response.access_token);
+      sessionStorage.setItem('user', JSON.stringify(userData));
+      sessionStorage.setItem('user_role', role);
+
+      // If Remember Me is checked, ALSO save to localStorage (persists after browser close)
+      if (rememberMe) {
+        localStorage.setItem('access_token', response.access_token);
+        localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('user_role', role);
+      }
 
       setToken(response.access_token);
       setUser(userData);
 
-      console.log(`✅ Login successful - Remember Me: ${rememberMe}`);
+      console.log(`✅ Login successful - Role: ${role}, Remember Me: ${rememberMe}`);
 
       return {
         success: true,
@@ -236,7 +264,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const verifyEmail = async (email: string, code: string) => {
     try {
-      const pendingRole = typeof window !== 'undefined' ? localStorage.getItem('pending_signup_role') : null;
+      const pendingRole = typeof window !== 'undefined' 
+        ? (sessionStorage.getItem('pending_signup_role') || localStorage.getItem('pending_signup_role'))
+        : null;
       const role = pendingRole || 'teacher';
       const endpoint = role === 'student' ? '/auth/student/verify-email' : '/auth/verify-email';
 
@@ -247,13 +277,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const userData = { ...response.user, role: response.user.role || role };
 
+      // Save to sessionStorage for current session
+      sessionStorage.setItem('access_token', response.access_token);
+      sessionStorage.setItem('user', JSON.stringify(userData));
+      sessionStorage.setItem('user_role', userData.role);
+
+      // Also save to localStorage after email verification (auto Remember Me)
       localStorage.setItem('access_token', response.access_token);
       localStorage.setItem('user', JSON.stringify(userData));
       localStorage.setItem('user_role', userData.role);
-      // Set remember_me to true by default after signup verification
-      localStorage.setItem('remember_me', 'true');
 
       if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('pending_signup_role');
         localStorage.removeItem('pending_signup_role');
       }
 
@@ -359,7 +394,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const updatedUser = { ...user!, name: response.name };
       setUser(updatedUser);
-      localStorage.setItem('user', JSON.stringify(updatedUser));
+      
+      // Update both storages
+      sessionStorage.setItem('user', JSON.stringify(updatedUser));
+      if (localStorage.getItem('user')) {
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      }
 
       return { success: true, user: updatedUser };
     } catch (error: any) {
@@ -377,7 +417,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role: response.role || user?.role,
       };
       setUser(updatedUser);
-      localStorage.setItem('user', JSON.stringify(updatedUser));
+      
+      // Update both storages
+      sessionStorage.setItem('user', JSON.stringify(updatedUser));
+      if (localStorage.getItem('user')) {
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      }
     } catch (error) {
       console.error('Failed to refresh user:', error);
     }
@@ -391,12 +436,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Logout failed:', error);
     } finally {
-      // Clear ALL session data including remember_me
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('user_role');
-      localStorage.removeItem('pending_signup_role');
-      localStorage.removeItem('remember_me');
+      // Clear ALL session data from both storages
+      clearAllStorage();
       setToken(null);
       setUser(null);
     }
@@ -409,11 +450,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         method: 'DELETE',
       });
 
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('user_role');
-      localStorage.removeItem('pending_signup_role');
-      localStorage.removeItem('remember_me');
+      clearAllStorage();
       setToken(null);
       setUser(null);
 
