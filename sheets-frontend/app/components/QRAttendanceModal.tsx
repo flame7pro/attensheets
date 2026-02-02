@@ -274,7 +274,8 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                             </div>
                             <button
                                 onClick={onClose}
-                                className="ml-2 p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors flex-shrink-0"
+                                className="ml-2 p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors flex-shrink-0 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] flex items-center justify-center"
+                                aria-label="Close modal"
                             >
                                 <X className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                             </button>
@@ -283,9 +284,9 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
                     {/* Date Display */}
                     <div className="bg-emerald-50 border-b border-emerald-200 px-4 sm:px-6 py-2 sm:py-3 flex-shrink-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                             <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-700 flex-shrink-0" />
-                            <span className="text-xs sm:text-sm md:text-base font-semibold text-emerald-900 truncate">
+                            <span className="text-xs sm:text-sm md:text-base font-semibold text-emerald-900 break-words">
                                 {new Date(currentDate).toLocaleDateString('en-US', {
                                     weekday: 'long',
                                     year: 'numeric',
@@ -315,7 +316,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                                     <X className="w-4 h-4 sm:w-5 sm:h-5 text-rose-600 flex-shrink-0" />
                                 )}
                                 {notification.type === 'info' && (
-                                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                 )}
@@ -333,13 +334,14 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                             </div>
                             <button
                                 onClick={() => setNotification(null)}
-                                className={`p-1 rounded-lg transition-colors flex-shrink-0 ${
+                                className={`p-1 rounded-lg transition-colors flex-shrink-0 min-w-[32px] min-h-[32px] flex items-center justify-center ${
                                     notification.type === 'success'
                                         ? 'hover:bg-emerald-200'
                                         : notification.type === 'error'
                                         ? 'hover:bg-rose-200'
                                         : 'hover:bg-blue-200'
                                 }`}
+                                aria-label="Close notification"
                             >
                                 <X
                                     className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${
@@ -387,11 +389,15 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                                                 setRotationInterval(newInterval);
                                                 setTimeLeft(newInterval);
                                             }}
-                                            className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                                            className="flex-1 h-2 sm:h-2.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                                            style={{
+                                                WebkitAppearance: 'none',
+                                                appearance: 'none'
+                                            }}
                                         />
-                                        <div className="flex items-center gap-1.5 sm:gap-2 bg-white px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg border-2 border-emerald-500 flex-shrink-0">
-                                            <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600" />
-                                            <span className="font-bold text-emerald-900 text-sm sm:text-base">{rotationInterval}s</span>
+                                        <div className="flex items-center gap-1.5 sm:gap-2 bg-white px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg border-2 border-emerald-500 flex-shrink-0 min-w-[60px] sm:min-w-[70px]">
+                                            <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 flex-shrink-0" />
+                                            <span className="font-bold text-emerald-900 text-sm sm:text-base whitespace-nowrap">{rotationInterval}s</span>
                                         </div>
                                     </div>
                                     <p className="text-[10px] sm:text-xs text-slate-500 mt-2 sm:mt-3">
@@ -463,15 +469,16 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                                             <img 
                                                 src={qrCodeUrl} 
                                                 alt="QR Code" 
-                                                className="w-40 h-40 xs:w-48 xs:h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 mx-auto"
+                                                className="w-full max-w-[160px] sm:max-w-[224px] md:max-w-[256px] h-auto mx-auto"
                                             />
                                         )}
                                         
                                         {/* Zoom Button */}
                                         <button
                                             onClick={() => setIsZoomed(true)}
-                                            className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 p-1.5 sm:p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md sm:rounded-lg shadow-lg transition-all"
+                                            className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 p-1.5 sm:p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md sm:rounded-lg shadow-lg transition-all min-w-[32px] min-h-[32px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center"
                                             title="Zoom QR Code"
+                                            aria-label="Zoom QR Code"
                                         >
                                             <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
                                         </button>
@@ -503,7 +510,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                                 >
                                     {isStopping ? (
                                         <>
-                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                            <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                                             <span className="text-xs sm:text-sm md:text-base">Stopping Session...</span>
                                         </>
                                     ) : (
@@ -526,55 +533,56 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             {/* Zoomed QR Code Modal - IMPROVED DESIGN */}
             {isZoomed && qrCodeUrl && (
                 <div 
-                    className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[60] p-3 sm:p-4"
+                    className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[60] p-4 sm:p-6"
                     onClick={() => setIsZoomed(false)}
                 >
                     <div 
-                        className="relative w-full max-w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-3xl"
+                        className="relative w-full max-w-[90vw] sm:max-w-lg md:max-w-xl lg:max-w-2xl mx-auto"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Close Button - Floating */}
+                        {/* Close Button - Inside card, top right */}
                         <button
                             onClick={() => setIsZoomed(false)}
-                            className="absolute -top-12 right-0 sm:-top-14 sm:right-0 p-2.5 sm:p-3 bg-rose-600 hover:bg-rose-700 text-white rounded-lg sm:rounded-xl shadow-xl transition-all z-10 flex items-center gap-2"
+                            className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 sm:p-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-xl transition-all z-10 flex items-center gap-1.5 min-h-[40px] sm:min-h-[44px]"
                             title="Close"
+                            aria-label="Close zoom view"
                         >
-                            <Minimize2 className="w-5 h-5 sm:w-6 sm:h-6" />
-                            <span className="text-sm sm:text-base font-medium hidden sm:inline">Close</span>
+                            <Minimize2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                            <span className="text-xs sm:text-sm font-medium hidden sm:inline">Close</span>
                         </button>
 
                         {/* Main Content */}
                         <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden">
                             {/* Header */}
                             <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 sm:px-6 py-4 sm:py-5 text-center">
-                                <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-1">
+                                <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white mb-1">
                                     Scan This QR Code
                                 </h3>
-                                <p className="text-sm sm:text-base text-emerald-50">
+                                <p className="text-xs sm:text-sm text-emerald-50">
                                     Point your camera at the QR code below
                                 </p>
                             </div>
 
                             {/* QR Code - No extra containers, cleaner look */}
-                            <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-6 sm:p-8 md:p-12 flex items-center justify-center">
-                                <div className="bg-white p-5 sm:p-6 md:p-8 rounded-2xl shadow-2xl border-4 border-emerald-200">
+                            <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-4 sm:p-6 md:p-8 flex items-center justify-center">
+                                <div className="bg-white p-4 sm:p-5 md:p-6 rounded-2xl shadow-2xl border-4 border-emerald-200 max-w-full">
                                     <img 
                                         src={qrCodeUrl} 
                                         alt="QR Code - Zoomed" 
-                                        className="w-[300px] h-[300px] sm:w-[350px] sm:h-[350px] md:w-[420px] md:h-[420px] lg:w-[480px] lg:h-[480px] mx-auto"
+                                        className="w-full max-w-[280px] sm:max-w-[320px] md:max-w-[380px] lg:max-w-[440px] h-auto mx-auto"
                                     />
                                 </div>
                             </div>
 
                             {/* Timer - Clean bottom section */}
                             <div className="bg-white border-t-2 border-emerald-100 px-4 sm:px-6 py-4 sm:py-5 text-center">
-                                <div className="inline-flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-5 sm:px-6 md:px-8 py-3 sm:py-3.5 rounded-full shadow-lg">
-                                    <Clock className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
-                                    <span className="text-base sm:text-lg md:text-xl font-bold whitespace-nowrap">
+                                <div className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 sm:px-5 md:px-6 py-2.5 sm:py-3 rounded-full shadow-lg">
+                                    <Clock className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                                    <span className="text-sm sm:text-base md:text-lg font-bold whitespace-nowrap">
                                         Next code in: {timeLeft}s
                                     </span>
                                 </div>
-                                <p className="text-xs sm:text-sm text-slate-500 mt-3 sm:mt-4">
+                                <p className="text-xs sm:text-sm text-slate-500 mt-3">
                                     Tap anywhere outside to close
                                 </p>
                             </div>
