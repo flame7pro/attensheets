@@ -77,19 +77,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      console.log('🔍 Checking existing session...');
+
       // Check sessionStorage first (current browser session)
       let storedToken = sessionStorage.getItem('access_token');
       let storedUser = sessionStorage.getItem('user');
       let storedRole = sessionStorage.getItem('user_role');
-      let isSessionStorage = true;
+      let source = 'sessionStorage';
 
       // If not in sessionStorage, check localStorage (Remember Me was checked)
       if (!storedToken || !storedUser) {
         storedToken = localStorage.getItem('access_token');
         storedUser = localStorage.getItem('user');
         storedRole = localStorage.getItem('user_role');
-        isSessionStorage = false;
+        source = 'localStorage';
       }
+
+      console.log(`📦 Token found in: ${source}`);
+      console.log(`🔑 Token exists: ${!!storedToken}`);
+      console.log(`👤 User exists: ${!!storedUser}`);
 
       if (storedToken && storedUser) {
         try {
@@ -108,14 +114,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setToken(storedToken);
             setUser(userData);
 
-            // If data was only in localStorage (Remember Me), also set in sessionStorage for current session
-            if (!isSessionStorage) {
-              sessionStorage.setItem('access_token', storedToken);
-              sessionStorage.setItem('user', storedUser);
+            // ✅ CRITICAL FIX: Always sync to BOTH storages
+            // This ensures tokens are available in both places during active session
+            sessionStorage.setItem('access_token', storedToken);
+            sessionStorage.setItem('user', storedUser);
+            if (storedRole) {
+              sessionStorage.setItem('user_role', storedRole);
+            }
+
+            // If token was in localStorage, keep it there (Remember Me)
+            if (source === 'localStorage') {
+              localStorage.setItem('access_token', storedToken);
+              localStorage.setItem('user', storedUser);
               if (storedRole) {
-                sessionStorage.setItem('user_role', storedRole);
+                localStorage.setItem('user_role', storedRole);
               }
             }
+
+            console.log('✅ Session restored successfully');
 
             // Auto-redirect to dashboard if on auth page
             const currentPath = window.location.pathname;
@@ -124,13 +140,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               router.push(redirectPath);
             }
           } else {
+            console.log('❌ Token validation failed');
             // Token invalid, clear everything
             clearAllStorage();
           }
         } catch (error) {
-          console.error('Session check error:', error);
+          console.error('❌ Session check error:', error);
           clearAllStorage();
         }
+      } else {
+        console.log('ℹ️ No existing session found');
       }
       
       setLoading(false);
@@ -139,8 +158,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkExistingSession();
   }, [router]);
 
+  // ✅ Handle browser close: Clear localStorage if Remember Me wasn't checked
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const rememberMe = localStorage.getItem('remember_me') === 'true';
+      
+      if (!rememberMe) {
+        console.log('🧹 Browser closing without Remember Me - Clearing localStorage');
+        // Clear localStorage on browser close (sessionStorage clears automatically)
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('user_role');
+        localStorage.removeItem('remember_me');
+      } else {
+        console.log('💾 Browser closing with Remember Me - Keeping localStorage');
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
   const clearAllStorage = () => {
     if (typeof window === 'undefined') return;
+    
+    console.log('🧹 Clearing all storage...');
     
     // Clear sessionStorage
     sessionStorage.removeItem('access_token');
@@ -194,6 +239,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       let role: string = 'teacher';
       let deviceInfo: DeviceInfo | null = null;
 
+      console.log(`🔐 Login attempt - Remember Me: ${rememberMe}`);
+
       // Try teacher login first (NO device fingerprinting)
       try {
         console.log('🔍 Attempting teacher login...');
@@ -234,22 +281,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Save login data
       const userData = { ...response.user, role };
 
-      // Always save to sessionStorage (persists during browser session)
+      // ✅ CRITICAL FIX: ALWAYS save to BOTH storages during active session
+      // This allows page refreshes to work without Remember Me
       sessionStorage.setItem('access_token', response.access_token);
       sessionStorage.setItem('user', JSON.stringify(userData));
       sessionStorage.setItem('user_role', role);
 
-      // If Remember Me is checked, ALSO save to localStorage (persists after browser close)
-      if (rememberMe) {
-        localStorage.setItem('access_token', response.access_token);
-        localStorage.setItem('user', JSON.stringify(userData));
-        localStorage.setItem('user_role', role);
-      }
+      localStorage.setItem('access_token', response.access_token);
+      localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem('user_role', role);
+
+      // ✅ Set a flag for Remember Me to control browser-close behavior
+      localStorage.setItem('remember_me', rememberMe.toString());
 
       setToken(response.access_token);
       setUser(userData);
 
       console.log(`✅ Login successful - Role: ${role}, Remember Me: ${rememberMe}`);
+      console.log(`📦 Saved to sessionStorage: ✅`);
+      console.log(`📦 Saved to localStorage: ✅`);
 
       return {
         success: true,
@@ -277,15 +327,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const userData = { ...response.user, role: response.user.role || role };
 
-      // Save to sessionStorage for current session
+      // Save to both storages
       sessionStorage.setItem('access_token', response.access_token);
       sessionStorage.setItem('user', JSON.stringify(userData));
       sessionStorage.setItem('user_role', userData.role);
 
-      // Also save to localStorage after email verification (auto Remember Me)
       localStorage.setItem('access_token', response.access_token);
       localStorage.setItem('user', JSON.stringify(userData));
       localStorage.setItem('user_role', userData.role);
+      
+      // After signup verification, auto-enable Remember Me
+      localStorage.setItem('remember_me', 'true');
 
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem('pending_signup_role');
@@ -397,9 +449,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Update both storages
       sessionStorage.setItem('user', JSON.stringify(updatedUser));
-      if (localStorage.getItem('user')) {
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-      }
+      localStorage.setItem('user', JSON.stringify(updatedUser));
 
       return { success: true, user: updatedUser };
     } catch (error: any) {
@@ -420,9 +470,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Update both storages
       sessionStorage.setItem('user', JSON.stringify(updatedUser));
-      if (localStorage.getItem('user')) {
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-      }
+      localStorage.setItem('user', JSON.stringify(updatedUser));
     } catch (error) {
       console.error('Failed to refresh user:', error);
     }
