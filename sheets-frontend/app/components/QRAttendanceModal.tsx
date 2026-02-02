@@ -530,84 +530,62 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 </div>
             </div>
 
-            {/* Zoomed QR Code Modal - REDESIGNED FULL SCREEN */}
+            {/* Zoomed QR Code Modal - FULLY RESPONSIVE */}
             {isZoomed && qrCodeUrl && (
                 <div 
-                    className="fixed inset-0 bg-gradient-to-br from-emerald-900/95 via-teal-900/95 to-emerald-900/95 backdrop-blur-lg flex flex-col z-[60]"
+                    className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-3 sm:p-4"
                     onClick={() => setIsZoomed(false)}
                 >
-                    {/* Top Bar */}
-                    <div className="flex items-center justify-between px-4 sm:px-6 py-4 sm:py-5">
-                        <div className="flex items-center gap-2 sm:gap-3">
-                            <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 bg-emerald-400 rounded-full animate-pulse"></div>
-                            <span className="text-white font-semibold text-sm sm:text-base">
-                                QR Code Active
-                            </span>
-                        </div>
-                        
-                        <button
-                            onClick={() => setIsZoomed(false)}
-                            className="flex items-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-lg sm:rounded-xl transition-all border border-white/20"
-                            aria-label="Close zoom view"
-                        >
-                            <X className="w-5 h-5 sm:w-6 sm:h-6" />
-                            <span className="text-sm sm:text-base font-medium hidden sm:inline">Close</span>
-                        </button>
-                    </div>
-
-                    {/* Main Content - Centered */}
                     <div 
-                        className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 py-6 sm:py-8"
+                        className="relative bg-white rounded-2xl sm:rounded-3xl shadow-2xl w-full max-w-[95vw] sm:max-w-md md:max-w-lg lg:max-w-xl overflow-hidden"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Title */}
-                        <h3 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white mb-2 sm:mb-3 text-center">
-                            Scan QR Code
-                        </h3>
-                        <p className="text-sm sm:text-base text-emerald-100 mb-6 sm:mb-8 text-center max-w-md">
-                            Point your camera at the code below to mark attendance
-                        </p>
+                        {/* Close Button */}
+                        <button
+                            onClick={() => setIsZoomed(false)}
+                            className="absolute top-3 right-3 sm:top-4 sm:right-4 z-10 p-2 sm:p-2.5 bg-slate-100 hover:bg-slate-200 rounded-full transition-all shadow-lg"
+                            aria-label="Close"
+                        >
+                            <X className="w-5 h-5 sm:w-6 sm:h-6 text-slate-700" />
+                        </button>
 
-                        {/* QR Code - Large and Clean */}
-                        <div className="relative">
-                            {/* Glowing background effect */}
-                            <div className="absolute inset-0 bg-white/20 blur-3xl rounded-full"></div>
-                            
-                            {/* QR Code Container */}
-                            <div className="relative bg-white p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl shadow-2xl">
-                                <img 
-                                    src={qrCodeUrl} 
-                                    alt="QR Code - Zoomed" 
-                                    className="w-[280px] h-[280px] sm:w-[340px] sm:h-[340px] md:w-[400px] md:h-[400px] lg:w-[460px] lg:h-[460px]"
-                                />
+                        {/* Content */}
+                        <div className="p-4 sm:p-6 md:p-8 lg:p-10">
+                            {/* Title */}
+                            <div className="text-center mb-4 sm:mb-6">
+                                <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">
+                                    Scan QR Code
+                                </h3>
+                                <p className="text-xs sm:text-sm md:text-base text-slate-600 px-2">
+                                    Point your camera to mark attendance
+                                </p>
                             </div>
-                        </div>
 
-                        {/* Timer Badge */}
-                        <div className="mt-6 sm:mt-8 flex items-center gap-3 bg-white/10 backdrop-blur-md border border-white/20 px-5 sm:px-6 md:px-8 py-3 sm:py-4 rounded-full">
-                            <div className="flex items-center gap-2">
-                                <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-300" />
-                                <span className="text-lg sm:text-xl md:text-2xl font-bold text-white">
-                                    {timeLeft}s
-                                </span>
+                            {/* QR Code */}
+                            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl mb-4 sm:mb-6">
+                                <div className="bg-white p-3 sm:p-4 md:p-5 lg:p-6 rounded-lg sm:rounded-xl shadow-lg mx-auto max-w-fit">
+                                    <img 
+                                        src={qrCodeUrl} 
+                                        alt="QR Code" 
+                                        className="w-full max-w-[220px] sm:max-w-[260px] md:max-w-[300px] lg:max-w-[340px] h-auto mx-auto"
+                                    />
+                                </div>
                             </div>
-                            <div className="w-px h-6 bg-white/20"></div>
-                            <span className="text-xs sm:text-sm text-emerald-100">
-                                Next code
-                            </span>
+
+                            {/* Timer */}
+                            <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 sm:px-6 py-3 sm:py-4 rounded-xl mb-3 sm:mb-4">
+                                <Clock className="w-5 h-5 sm:w-6 sm:h-6" />
+                                <div className="flex items-baseline gap-1.5 sm:gap-2">
+                                    <span className="text-2xl sm:text-3xl md:text-4xl font-bold">{timeLeft}</span>
+                                    <span className="text-xs sm:text-sm opacity-90">seconds until next code</span>
+                                </div>
+                            </div>
+
+                            {/* Hint */}
+                            <p className="text-[10px] sm:text-xs md:text-sm text-center text-slate-500">
+                                Tap outside to close
+                            </p>
                         </div>
-
-                        {/* Instructions */}
-                        <p className="mt-6 sm:mt-8 text-xs sm:text-sm text-emerald-200 text-center max-w-sm">
-                            💡 Keep your camera steady and scan within the time limit
-                        </p>
-                    </div>
-
-                    {/* Bottom Hint */}
-                    <div className="text-center pb-4 sm:pb-6">
-                        <p className="text-xs sm:text-sm text-emerald-300/80">
-                            Tap anywhere outside the QR code to close
-                        </p>
                     </div>
                 </div>
             )}
