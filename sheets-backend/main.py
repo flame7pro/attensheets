@@ -172,7 +172,7 @@ class SessionAttendanceUpdate(BaseModel):
     session_id: str
     student_id: str
     status: str
-    
+
 class SessionData(BaseModel):
     id: str
     name: str
@@ -1794,10 +1794,24 @@ async def update_class(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to update class: {str(e)}")
 
-request.date}")
+@app.put("/classes/{class_id}/multi-session-attendance")
+async def update_multi_session_attendance(
+    class_id: str,
+    request: MultiSessionAttendanceUpdate,
+    email: str = Depends(verify_token)
+):
+    """
+    Update multi-session attendance for a student on a specific date.
+    Stores sessions array in the new format: { sessions: [...], updated_at: ... }
+    """
+    print(f"\n{'='*60}")
+    print(f"[MULTI_SESSION] Update request")
+    print(f"  Class ID: {class_id}")
+    print(f"  Student ID: {request.student_id}")
+    print(f"  Date: {request.date}")
     print(f"  Sessions received: {len(request.sessions)}")
     
-    # ✅ CRITICAL FIX: Filter out null sessions IMMEDIATELY
+    # Filter out null sessions IMMEDIATELY
     valid_sessions = [
         s for s in request.sessions 
         if s.status is not None and s.status in ['P', 'A', 'L']
@@ -1812,11 +1826,11 @@ request.date}")
         # Get teacher
         user = db.get_user_by_email(email)
         if not user:
-            print(f"[MULTI_SESSION] ❌ User not found: {email}")
+            print(f"[MULTI_SESSION] User not found: {email}")
             raise HTTPException(status_code=404, detail="User not found")
         
         user_id = user["id"]
-        print(f"[MULTI_SESSION] ✅ User found: {user_id}")
+        print(f"[MULTI_SESSION] User found: {user_id}")
         
         # Get class data - MongoDB-aware
         if DB_TYPE == "mongodb":
@@ -1826,10 +1840,10 @@ request.date}")
             class_data = db.read_json(class_file)
         
         if not class_data:
-            print(f"[MULTI_SESSION] ❌ Class not found: {class_id}")
+            print(f"[MULTI_SESSION] Class not found: {class_id}")
             raise HTTPException(status_code=404, detail="Class not found")
         
-        print(f"[MULTI_SESSION] ✅ Class found: {class_data.get('name')}")
+        print(f"[MULTI_SESSION] Class found: {class_data.get('name')}")
         
         # Find student in class
         students = class_data.get("students", [])
@@ -1845,7 +1859,7 @@ request.date}")
                 if "attendance" not in student:
                     student["attendance"] = {}
                 
-                # ✅ Store ONLY valid sessions (those with non-null status)
+                # Store ONLY valid sessions (those with non-null status)
                 if valid_sessions:
                     student["attendance"][request.date] = {
                         "sessions": [
@@ -1858,18 +1872,18 @@ request.date}")
                         ],
                         "updated_at": datetime.now(timezone.utc).isoformat()
                     }
-                    print(f"[MULTI_SESSION] ✅ Updated student {request.student_id}")
+                    print(f"[MULTI_SESSION] Updated student {request.student_id}")
                     print(f"  Valid sessions stored: {len(valid_sessions)}")
                 else:
                     # No valid sessions - remove the date entry if it exists
                     if request.date in student["attendance"]:
                         del student["attendance"][request.date]
-                        print(f"[MULTI_SESSION] ℹ️ No valid sessions - removed date entry")
+                        print(f"[MULTI_SESSION] No valid sessions - removed date entry")
                 
                 break
         
         if not student_found:
-            print(f"[MULTI_SESSION] ❌ Student not found in class: {request.student_id}")
+            print(f"[MULTI_SESSION] Student not found in class: {request.student_id}")
             raise HTTPException(status_code=404, detail="Student not found in class")
         
         # Update the student in the list
@@ -1892,15 +1906,15 @@ request.date}")
                 {"teacher_id": user_id, "id": stored_class_id},
                 {"$set": class_data}
             )
-            print(f"[MULTI_SESSION] ✅ MongoDB update complete")
+            print(f"[MULTI_SESSION] MongoDB update complete")
         else:
             db.write_json(class_file, class_data)
-            print(f"[MULTI_SESSION] ✅ File update complete")
+            print(f"[MULTI_SESSION] File update complete")
         
         # Update user overview
         db.update_user_overview(user_id)
         
-        print(f"[MULTI_SESSION] ✅ SUCCESS")
+        print(f"[MULTI_SESSION] SUCCESS")
         print(f"{'='*60}\n")
         
         return {
@@ -1912,14 +1926,13 @@ request.date}")
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[MULTI_SESSION] ❌ ERROR: {e}")
+        print(f"[MULTI_SESSION] ERROR: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to update multi-session attendance: {str(e)}"
-        )
-
+            detail=f"Failed to update multi-session attendance: {str(e)}")
+        
 @app.delete("/classes/{class_id}")
 async def delete_class(class_id: str, email: str = Depends(verify_token)):
     """Delete a class"""
