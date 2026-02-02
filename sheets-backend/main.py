@@ -1830,61 +1830,102 @@ async def update_multi_session_attendance(
     print(f"  Student ID: {request.student_id}")
     print(f"  Date: {request.date}")
     print(f"  Sessions: {len(request.sessions)}")
+    for idx, session in enumerate(request.sessions):
+        print(f"    Session {idx + 1}: {session.id} - {session.name} - {session.status}")
     print(f"{'='*60}")
     
     try:
         # Get teacher
         user = db.get_user_by_email(email)
         if not user:
+            print(f"[MULTI_SESSION] ❌ User not found: {email}")
             raise HTTPException(status_code=404, detail="User not found")
         
         user_id = user["id"]
+        print(f"[MULTI_SESSION] ✅ User found: {user_id}")
         
-        # Get class data
-        class_file = db.get_class_file(user_id, class_id)
-        class_data = db.read_json(class_file)
+        # Get class data - using MongoDB-aware method
+        if DB_TYPE == "mongodb":
+            # MongoDB stores class_id as int or Int64
+            class_data = db.get_class(user_id, class_id)
+        else:
+            # File-based storage
+            class_file = db.get_class_file(user_id, class_id)
+            class_data = db.read_json(class_file)
         
         if not class_data:
+            print(f"[MULTI_SESSION] ❌ Class not found: {class_id}")
             raise HTTPException(status_code=404, detail="Class not found")
+        
+        print(f"[MULTI_SESSION] ✅ Class found: {class_data.get('name')}")
         
         # Find student in class
         students = class_data.get("students", [])
         student_found = False
+        student_index = None
         
-        for student in students:
+        for idx, student in enumerate(students):
             if student.get("id") == request.student_id:
                 student_found = True
+                student_index = idx
                 
                 # Initialize attendance dict if needed
                 if "attendance" not in student:
                     student["attendance"] = {}
                 
                 # Store in NEW format: { sessions: [...], updated_at: ... }
+                # ✅ FIX: Only include sessions with non-null status
+                valid_sessions = [
+                    {
+                        "id": session.id,
+                        "name": session.name,
+                        "status": session.status
+                    }
+                    for session in request.sessions
+                    if session.status is not None  # ✅ CRITICAL FIX
+                ]
+                
                 student["attendance"][request.date] = {
-                    "sessions": [
-                        {
-                            "id": session.id,
-                            "name": session.name,
-                            "status": session.status
-                        }
-                        for session in request.sessions
-                    ],
-                    "updated_at": datetime.utcnow().isoformat()
+                    "sessions": valid_sessions,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
                 }
                 
                 print(f"[MULTI_SESSION] Updated student {request.student_id}")
-                print(f"  Sessions stored: {len(request.sessions)}")
+                print(f"  Valid sessions stored: {len(valid_sessions)}")
+                for idx, s in enumerate(valid_sessions):
+                    print(f"    Session {idx + 1}: {s['id']} - {s['name']} - {s['status']}")
                 break
         
         if not student_found:
+            print(f"[MULTI_SESSION] ❌ Student not found in class: {request.student_id}")
             raise HTTPException(status_code=404, detail="Student not found in class")
         
+        # Update the student in the list
+        students[student_index] = students[student_index]
+        class_data["students"] = students
+        
         # Recalculate statistics
-        class_data["statistics"] = db.calculate_class_statistics(class_data, class_id)
+        if DB_TYPE == "mongodb":
+            rel_class_id = db._class_rel_id(class_data.get("id"))
+            class_data["statistics"] = db.calculate_class_statistics(class_data, rel_class_id)
+        else:
+            class_data["statistics"] = db.calculate_class_statistics(class_data, class_id)
         
         # Save updated class
-        class_data["updated_at"] = datetime.utcnow().isoformat()
-        db.write_json(class_file, class_data)
+        class_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        
+        if DB_TYPE == "mongodb":
+            # Use MongoDB update
+            stored_class_id = class_data.get("id")
+            db.classes.update_one(
+                {"teacher_id": user_id, "id": stored_class_id},
+                {"$set": class_data}
+            )
+            print(f"[MULTI_SESSION] ✅ MongoDB update complete")
+        else:
+            # Use file-based update
+            db.write_json(class_file, class_data)
+            print(f"[MULTI_SESSION] ✅ File update complete")
         
         # Update user overview
         db.update_user_overview(user_id)
