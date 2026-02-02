@@ -171,14 +171,12 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         return;
       }
   
-      const validSessions = sessions.filter(s => s.status !== null);
-  
       console.log('[MULTI_SESSION] Saving to backend...');
       console.log('  Student ID:', selectedStudent);
       console.log('  Date:', multiSessionDate);
-      console.log('  Sessions:', validSessions);
+      console.log('  All Sessions (including nulls):', sessions);
   
-      // ✅ CRITICAL FIX: AWAIT the backend save (blocking operation)
+      // ✅ CRITICAL FIX: Send ALL sessions (backend will filter nulls)
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/classes/${activeClass.id}/multi-session-attendance`,
         {
@@ -190,11 +188,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
           body: JSON.stringify({
             student_id: selectedStudent,
             date: multiSessionDate,
-            sessions: validSessions.map(s => ({
-              id: s.id,
-              name: s.name,
-              status: s.status
-            }))
+            sessions: sessions  // ✅ Send ALL sessions, not filtered!
           })
         }
       );
@@ -216,6 +210,9 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         console.log('[MULTI_SESSION] Updated from backend response');
       } else {
         // Fallback: Calculate locally if backend doesn't return full class
+        // Filter valid sessions for local state
+        const validSessions = sessions.filter(s => s.status !== null);
+        
         const updatedClass: Class = {
           ...activeClass,
           students: activeClass.students.map(student => {
