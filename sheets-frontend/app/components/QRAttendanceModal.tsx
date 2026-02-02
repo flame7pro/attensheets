@@ -563,15 +563,26 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                             </span>
                         </div>
                         
-                        {/* Close Button */}
-                        <button
-                            onClick={() => setIsZoomed(false)}
-                            className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 md:px-4 py-1.5 sm:py-2 md:py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-lg transition-all border border-white/20"
-                            aria-label="Close"
-                        >
-                            <X className="w-4 h-4 sm:w-5 sm:h-5" />
-                            <span className="text-xs sm:text-sm font-medium">Close</span>
-                        </button>
+                        {/* Timer Badge - Moved to top bar */}
+                        <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
+                            <div className="bg-blue-600 text-white px-3 sm:px-4 md:px-5 py-1.5 sm:py-2 rounded-full shadow-lg">
+                                <div className="flex items-center gap-1.5 sm:gap-2">
+                                    <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-5 md:h-5 flex-shrink-0" />
+                                    <span className="text-sm sm:text-base md:text-lg font-bold">{timeLeft}</span>
+                                    <span className="text-xs sm:text-sm opacity-90 hidden sm:inline">sec</span>
+                                </div>
+                            </div>
+
+                            {/* Close Button */}
+                            <button
+                                onClick={() => setIsZoomed(false)}
+                                className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 md:px-4 py-1.5 sm:py-2 md:py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-lg transition-all border border-white/20"
+                                aria-label="Close"
+                            >
+                                <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                                <span className="text-xs sm:text-sm font-medium">Close</span>
+                            </button>
+                        </div>
                     </div>
 
                     {/* Main Content - Centered */}
@@ -587,22 +598,13 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                             Point your camera at the code below to mark attendance
                         </p>
 
-                        {/* QR Code Container */}
-                        <div className="bg-white rounded-xl sm:rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 lg:p-10 xl:p-12 shadow-2xl mb-4 sm:mb-6 md:mb-8 lg:mb-10 max-w-full">
+                        {/* QR Code Container - Reduced padding */}
+                        <div className="bg-white rounded-xl sm:rounded-2xl md:rounded-3xl p-3 sm:p-4 md:p-5 lg:p-6 shadow-2xl max-w-full">
                             <img 
                                 src={qrCodeUrl} 
                                 alt="QR Code" 
                                 className="w-[240px] h-[240px] sm:w-[300px] sm:h-[300px] md:w-[380px] md:h-[380px] lg:w-[460px] lg:h-[460px] xl:w-[520px] xl:h-[520px] mx-auto"
                             />
-                        </div>
-
-                        {/* Timer Badge */}
-                        <div className="bg-blue-600 text-white px-4 sm:px-5 md:px-6 lg:px-8 py-2.5 sm:py-3 md:py-4 rounded-full shadow-xl">
-                            <div className="flex items-center gap-2 sm:gap-2.5 md:gap-3">
-                                <Clock className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 flex-shrink-0" />
-                                <span className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold">{timeLeft}</span>
-                                <span className="text-xs sm:text-sm md:text-base opacity-90 whitespace-nowrap">seconds until next code</span>
-                            </div>
                         </div>
                     </div>
 
