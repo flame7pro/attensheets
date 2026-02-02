@@ -592,7 +592,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                     >
                         
                         {/* QR Code Container - Reduced padding */}
-                        <div className="bg-white rounded-xl sm:rounded-2xl md:rounded-3xl p-3 sm:p-4 md:p-5 lg:p-6 shadow-2xl max-w-full">
+                        <div className="bg-white rounded-xl sm:rounded-2xl md:rounded-3xl p-2 sm:p-3 md:p-4 lg:p-4 shadow-2xl max-w-full">
                             <img 
                                 src={qrCodeUrl} 
                                 alt="QR Code" 
