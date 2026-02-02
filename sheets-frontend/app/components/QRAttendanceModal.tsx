@@ -481,30 +481,31 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
                                 {/* QR Code Display with Zoom Button */}
                                 <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg sm:rounded-xl md:rounded-2xl p-3 sm:p-4 md:p-6 text-center border-2 border-emerald-200">
-                                    {/* QR Code */}
-                                    <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg sm:rounded-xl inline-block shadow-lg max-w-full">
-                                        {qrCodeUrl && (
-                                            <img 
-                                                src={qrCodeUrl} 
-                                                alt="QR Code" 
-                                                className="w-full max-w-[160px] sm:max-w-[224px] md:max-w-[256px] h-auto mx-auto"
-                                            />
-                                        )}
+                                    {/* QR Code Container with Zoom Button */}
+                                    <div className="relative inline-block max-w-full">
+                                        <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg sm:rounded-xl shadow-lg">
+                                            {qrCodeUrl && (
+                                                <img 
+                                                    src={qrCodeUrl} 
+                                                    alt="QR Code" 
+                                                    className="w-full max-w-[160px] sm:max-w-[224px] md:max-w-[256px] h-auto mx-auto"
+                                                />
+                                            )}
+                                        </div>
+                                        
+                                        {/* Zoom Button - Top Right Corner Outside */}
+                                        <button
+                                            onClick={() => setIsZoomed(true)}
+                                            className="absolute -top-2 -right-2 sm:-top-3 sm:-right-3 p-2 sm:p-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all min-w-[36px] min-h-[36px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center group"
+                                            title="Enlarge QR Code"
+                                            aria-label="Enlarge QR Code"
+                                        >
+                                            <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" />
+                                        </button>
                                     </div>
                                     
-                                    {/* Zoom Button - Below QR Code */}
-                                    <button
-                                        onClick={() => setIsZoomed(true)}
-                                        className="mt-3 sm:mt-4 inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg sm:rounded-xl shadow-lg hover:shadow-xl transition-all font-medium text-sm sm:text-base"
-                                        title="Zoom QR Code"
-                                        aria-label="Zoom QR Code"
-                                    >
-                                        <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                                        <span>Enlarge QR Code</span>
-                                    </button>
-                                    
                                     <p className="text-[10px] sm:text-xs text-emerald-700 mt-2 sm:mt-3 font-medium">
-                                        💡 Click to view full-screen QR code for easier scanning
+                                        💡 Click zoom button to view full-screen QR code
                                     </p>
                                 </div>
 
