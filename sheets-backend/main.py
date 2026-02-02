@@ -195,7 +195,7 @@ class SessionData(BaseModel):
 
 
 class MultiSessionAttendanceUpdate(BaseModel):
-    student_id: int
+    student_id: str
     date: str
     sessions: List[SessionData]
     
