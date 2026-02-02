@@ -1,4 +1,4 @@
-// QRAttendanceModal.tsx - WITH QR CODE ZOOM FEATURE
+// QRAttendanceModal.tsx - FULLY RESPONSIVE WITH IMPROVED QR CODE ZOOM
 
 import React, { useState, useEffect, useRef } from 'react';
 import { X, QrCode, Users, Clock, Zap, CheckCircle, Calendar, Maximize2, Minimize2 } from 'lucide-react';
@@ -51,7 +51,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
         const qrDataString = JSON.stringify(qrData);
         const url = await QRCode.toDataURL(qrDataString, {
-            width: 300,
+            width: 400,
             margin: 2,
             color: { dark: '#059669', light: '#ffffff' },
         });
@@ -262,20 +262,30 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         <>
             {/* Main Modal */}
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">
-                <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-[95vw] sm:max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-[95vw] sm:max-w-2xl overflow-hidden flex flex-col max-h-[95vh]">
                     {/* Header */}
-                    <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 sm:px-6 py-3 sm:py-5 flex-shrink-0">
-                        <div className="flex-1">
-                            <h2 className="text-lg sm:text-2xl font-bold text-white">QR Code Attendance</h2>
-                            <p className="text-emerald-50 text-xs sm:text-sm mt-0.5 sm:mt-1 truncate">{className}</p>
+                    <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 sm:px-6 py-3 sm:py-4 flex-shrink-0">
+                        <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0">
+                                <h2 className="text-base sm:text-xl md:text-2xl font-bold text-white truncate">
+                                    QR Code Attendance
+                                </h2>
+                                <p className="text-emerald-50 text-xs sm:text-sm mt-0.5 truncate">{className}</p>
+                            </div>
+                            <button
+                                onClick={onClose}
+                                className="ml-2 p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors flex-shrink-0"
+                            >
+                                <X className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                            </button>
                         </div>
                     </div>
 
                     {/* Date Display */}
                     <div className="bg-emerald-50 border-b border-emerald-200 px-4 sm:px-6 py-2 sm:py-3 flex-shrink-0">
                         <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-700" />
-                            <span className="text-sm sm:text-base font-semibold text-emerald-900">
+                            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-700 flex-shrink-0" />
+                            <span className="text-xs sm:text-sm md:text-base font-semibold text-emerald-900 truncate">
                                 {new Date(currentDate).toLocaleDateString('en-US', {
                                     weekday: 'long',
                                     year: 'numeric',
@@ -289,7 +299,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                     {/* Notification Banner */}
                     {notification && (
                         <div
-                            className={`px-4 sm:px-6 py-3 flex items-center justify-between gap-3 ${
+                            className={`px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between gap-2 sm:gap-3 ${
                                 notification.type === 'success'
                                     ? 'bg-emerald-50 border-b border-emerald-200'
                                     : notification.type === 'error'
@@ -299,18 +309,18 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                         >
                             <div className="flex items-center gap-2 flex-1 min-w-0">
                                 {notification.type === 'success' && (
-                                    <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                                    <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600 flex-shrink-0" />
                                 )}
                                 {notification.type === 'error' && (
-                                    <X className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                                    <X className="w-4 h-4 sm:w-5 sm:h-5 text-rose-600 flex-shrink-0" />
                                 )}
                                 {notification.type === 'info' && (
-                                    <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                 )}
                                 <span
-                                    className={`text-sm font-medium ${
+                                    className={`text-xs sm:text-sm font-medium truncate ${
                                         notification.type === 'success'
                                             ? 'text-emerald-800'
                                             : notification.type === 'error'
@@ -332,7 +342,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                                 }`}
                             >
                                 <X
-                                    className={`w-4 h-4 ${
+                                    className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${
                                         notification.type === 'success'
                                             ? 'text-emerald-600'
                                             : notification.type === 'error'
@@ -345,28 +355,28 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                     )}
 
                     {/* Content */}
-                    <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
+                    <div className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6">
                         {!isActive ? (
                             /* Setup Screen */
-                            <div className="space-y-6">
+                            <div className="space-y-4 sm:space-y-6">
                                 <div className="text-center">
-                                    <div className="w-20 h-20 sm:w-24 sm:h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                        <QrCode className="w-10 h-10 sm:w-12 sm:h-12 text-emerald-600" />
+                                    <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                                        <QrCode className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 text-emerald-600" />
                                     </div>
-                                    <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">
+                                    <h3 className="text-base sm:text-lg md:text-xl font-bold text-slate-900 mb-1.5 sm:mb-2">
                                         Start QR Attendance
                                     </h3>
-                                    <p className="text-sm sm:text-base text-slate-600">
+                                    <p className="text-xs sm:text-sm md:text-base text-slate-600 px-2">
                                         Students will scan the QR code to mark their attendance
                                     </p>
                                 </div>
 
                                 {/* QR Settings */}
-                                <div className="bg-slate-50 rounded-xl p-4 sm:p-6">
-                                    <label className="block text-sm font-semibold text-slate-700 mb-3">
+                                <div className="bg-slate-50 rounded-lg sm:rounded-xl p-3 sm:p-4 md:p-6">
+                                    <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-2 sm:mb-3">
                                         QR Code Rotation Interval
                                     </label>
-                                    <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2 sm:gap-4">
                                         <input
                                             type="range"
                                             min="3"
@@ -379,96 +389,104 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                                             }}
                                             className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
                                         />
-                                        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border-2 border-emerald-500">
-                                            <Clock className="w-4 h-4 text-emerald-600" />
-                                            <span className="font-bold text-emerald-900">{rotationInterval}s</span>
+                                        <div className="flex items-center gap-1.5 sm:gap-2 bg-white px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg border-2 border-emerald-500 flex-shrink-0">
+                                            <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600" />
+                                            <span className="font-bold text-emerald-900 text-sm sm:text-base">{rotationInterval}s</span>
                                         </div>
                                     </div>
-                                    <p className="text-xs text-slate-500 mt-3">
+                                    <p className="text-[10px] sm:text-xs text-slate-500 mt-2 sm:mt-3">
                                         The QR code will change every {rotationInterval} seconds for security
                                     </p>
                                 </div>
 
                                 <button
                                     onClick={startSession}
-                                    className="w-full px-6 sm:px-8 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
+                                    className="w-full px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm sm:text-base font-semibold rounded-lg sm:rounded-xl hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
                                 >
-                                    <Zap className="w-5 h-5" />
+                                    <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
                                     Start QR Session
                                 </button>
                             </div>
                         ) : (
                             /* Active Session Screen */
-                            <div className="space-y-4 sm:space-y-6">
+                            <div className="space-y-3 sm:space-y-4 md:space-y-6">
                                 {/* Session Info */}
-                                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <Clock className="w-4 h-4 text-emerald-700" />
-                                        <span className="text-xs font-semibold text-emerald-700 uppercase">
+                                <div className="bg-emerald-50 border border-emerald-200 rounded-lg sm:rounded-xl p-3 sm:p-4">
+                                    <div className="flex items-center gap-1.5 sm:gap-2 mb-1">
+                                        <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-700" />
+                                        <span className="text-[10px] sm:text-xs font-semibold text-emerald-700 uppercase">
                                             Active Session #{sessionNumber}
                                         </span>
                                     </div>
-                                    <p className="text-lg font-bold text-emerald-900">QR Attendance for {new Date(currentDate).toLocaleDateString()}</p>
+                                    <p className="text-sm sm:text-base md:text-lg font-bold text-emerald-900 truncate">
+                                        QR Attendance for {new Date(currentDate).toLocaleDateString()}
+                                    </p>
                                 </div>
 
                                 {/* Stats */}
-                                <div className="grid grid-cols-3 gap-2 sm:gap-4">
-                                    <div className="bg-emerald-50 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-emerald-200">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <CheckCircle className="w-4 h-4 text-emerald-600" />
-                                            <span className="text-xs font-semibold text-emerald-700 uppercase">
+                                <div className="grid grid-cols-3 gap-2 sm:gap-3 md:gap-4">
+                                    <div className="bg-emerald-50 rounded-lg sm:rounded-xl p-2 sm:p-3 md:p-4 border border-emerald-200">
+                                        <div className="flex items-center gap-1 sm:gap-1.5 mb-1">
+                                            <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-emerald-600" />
+                                            <span className="text-[9px] sm:text-[10px] md:text-xs font-semibold text-emerald-700 uppercase">
                                                 Scanned
                                             </span>
                                         </div>
-                                        <p className="text-2xl sm:text-3xl font-bold text-emerald-900">{scannedCount}</p>
+                                        <p className="text-xl sm:text-2xl md:text-3xl font-bold text-emerald-900">{scannedCount}</p>
                                     </div>
 
-                                    <div className="bg-slate-50 rounded-xl p-3 sm:p-4 border border-slate-200">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <Users className="w-4 h-4 text-slate-600" />
-                                            <span className="text-xs font-semibold text-slate-700 uppercase">
+                                    <div className="bg-slate-50 rounded-lg sm:rounded-xl p-2 sm:p-3 md:p-4 border border-slate-200">
+                                        <div className="flex items-center gap-1 sm:gap-1.5 mb-1">
+                                            <Users className="w-3 h-3 sm:w-4 sm:h-4 text-slate-600" />
+                                            <span className="text-[9px] sm:text-[10px] md:text-xs font-semibold text-slate-700 uppercase">
                                                 Total
                                             </span>
                                         </div>
-                                        <p className="text-2xl sm:text-3xl font-bold text-slate-900">{totalStudents}</p>
+                                        <p className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900">{totalStudents}</p>
                                     </div>
 
-                                    <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border border-blue-200">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <Clock className="w-4 h-4 text-blue-600" />
-                                            <span className="text-xs font-semibold text-blue-700 uppercase">
-                                                Next Code
+                                    <div className="bg-blue-50 rounded-lg sm:rounded-xl p-2 sm:p-3 md:p-4 border border-blue-200">
+                                        <div className="flex items-center gap-1 sm:gap-1.5 mb-1">
+                                            <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600" />
+                                            <span className="text-[9px] sm:text-[10px] md:text-xs font-semibold text-blue-700 uppercase">
+                                                Next
                                             </span>
                                         </div>
-                                        <p className="text-2xl sm:text-3xl font-bold text-blue-900">{timeLeft}s</p>
+                                        <p className="text-xl sm:text-2xl md:text-3xl font-bold text-blue-900">{timeLeft}s</p>
                                     </div>
                                 </div>
 
                                 {/* QR Code Display with Zoom Button */}
-                                <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-8 text-center border-2 border-emerald-200 relative">
-                                    <div className="bg-white p-4 sm:p-6 rounded-xl sm:rounded-2xl inline-block shadow-lg relative">
-                                        {qrCodeUrl && <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 mx-auto" />}
+                                <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg sm:rounded-xl md:rounded-2xl p-3 sm:p-4 md:p-6 text-center border-2 border-emerald-200 relative">
+                                    <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg sm:rounded-xl inline-block shadow-lg relative max-w-full">
+                                        {qrCodeUrl && (
+                                            <img 
+                                                src={qrCodeUrl} 
+                                                alt="QR Code" 
+                                                className="w-40 h-40 xs:w-48 xs:h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 mx-auto"
+                                            />
+                                        )}
                                         
                                         {/* Zoom Button */}
                                         <button
                                             onClick={() => setIsZoomed(true)}
-                                            className="absolute top-2 right-2 p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-lg transition-all group"
+                                            className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 p-1.5 sm:p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md sm:rounded-lg shadow-lg transition-all"
                                             title="Zoom QR Code"
                                         >
-                                            <Maximize2 className="w-5 h-5" />
+                                            <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
                                         </button>
                                     </div>
-                                    <p className="text-xs text-emerald-700 mt-3 font-medium">
-                                        💡 Click the zoom button to enlarge QR code
+                                    <p className="text-[10px] sm:text-xs text-emerald-700 mt-2 sm:mt-3 font-medium">
+                                        💡 Tap zoom to enlarge QR code
                                     </p>
                                 </div>
 
                                 {/* Instructions */}
-                                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4">
-                                    <h4 className="font-semibold text-blue-900 text-sm mb-2">
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg sm:rounded-xl p-2.5 sm:p-3 md:p-4">
+                                    <h4 className="font-semibold text-blue-900 text-xs sm:text-sm mb-1.5 sm:mb-2">
                                         📱 Instructions for Students
                                     </h4>
-                                    <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
+                                    <ol className="text-[10px] sm:text-xs text-blue-800 space-y-0.5 sm:space-y-1 list-decimal list-inside">
                                         <li>Tap "Scan QR Code" in student dashboard</li>
                                         <li>Select this class from the list</li>
                                         <li>Point camera at QR code above</li>
@@ -481,22 +499,22 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                                 <button
                                     onClick={stopSession}
                                     disabled={isStopping}
-                                    className="w-full px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl shadow-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                    className="w-full px-4 sm:px-6 py-2.5 sm:py-3 bg-rose-600 hover:bg-rose-700 text-white text-sm sm:text-base font-semibold rounded-lg sm:rounded-xl shadow-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
                                     {isStopping ? (
                                         <>
                                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                            Stopping Session...
+                                            <span className="text-xs sm:text-sm md:text-base">Stopping Session...</span>
                                         </>
                                     ) : (
                                         <>
-                                            <X className="w-5 h-5" />
-                                            Stop Session & Mark Absent
+                                            <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                                            <span className="text-xs sm:text-sm md:text-base">Stop Session & Mark Absent</span>
                                         </>
                                     )}
                                 </button>
 
-                                <p className="text-xs text-center text-slate-500">
+                                <p className="text-[10px] sm:text-xs text-center text-slate-500">
                                     ⏰ Students who haven't scanned will be automatically marked as Absent
                                 </p>
                             </div>
@@ -505,55 +523,59 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 </div>
             </div>
 
-            {/* Zoomed QR Code Modal */}
+            {/* Zoomed QR Code Modal - FULLY RESPONSIVE */}
             {isZoomed && qrCodeUrl && (
                 <div 
-                    className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+                    className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[60] p-2 sm:p-4"
                     onClick={() => setIsZoomed(false)}
                 >
                     <div 
-                        className="relative bg-white rounded-2xl p-6 shadow-2xl max-w-[90vw] max-h-[90vh] flex flex-col"
+                        className="relative bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-6 shadow-2xl w-full max-w-[95vw] sm:max-w-[90vw] md:max-w-3xl lg:max-w-4xl max-h-[95vh] flex flex-col"
                         onClick={(e) => e.stopPropagation()}
                     >
                         {/* Close Button */}
                         <button
                             onClick={() => setIsZoomed(false)}
-                            className="absolute top-4 right-4 p-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-lg transition-all z-10"
+                            className="absolute top-2 right-2 sm:top-3 sm:right-3 md:top-4 md:right-4 p-1.5 sm:p-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-lg transition-all z-10"
                             title="Close"
                         >
-                            <Minimize2 className="w-6 h-6" />
+                            <Minimize2 className="w-5 h-5 sm:w-6 sm:h-6" />
                         </button>
 
                         {/* Header */}
-                        <div className="text-center mb-4">
-                            <h3 className="text-2xl font-bold text-slate-900 mb-1">Scan This QR Code</h3>
-                            <p className="text-sm text-slate-600">Point your camera at the QR code below</p>
+                        <div className="text-center mb-3 sm:mb-4 md:mb-6 pr-10 sm:pr-12">
+                            <h3 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">
+                                Scan This QR Code
+                            </h3>
+                            <p className="text-xs sm:text-sm md:text-base text-slate-600">
+                                Point your camera at the QR code below
+                            </p>
                         </div>
 
-                        {/* Zoomed QR Code */}
-                        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-8">
-                            <div className="bg-white p-8 rounded-2xl shadow-xl">
+                        {/* Zoomed QR Code - Responsive Container */}
+                        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg sm:rounded-xl md:rounded-2xl p-4 sm:p-6 md:p-8 min-h-0">
+                            <div className="bg-white p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl shadow-xl max-w-full max-h-full flex items-center justify-center">
                                 <img 
                                     src={qrCodeUrl} 
                                     alt="QR Code - Zoomed" 
-                                    className="w-[400px] h-[400px] sm:w-[500px] sm:h-[500px] mx-auto"
+                                    className="w-full h-full max-w-[280px] max-h-[280px] xs:max-w-[320px] xs:max-h-[320px] sm:max-w-[400px] sm:max-h-[400px] md:max-w-[500px] md:max-h-[500px] lg:max-w-[600px] lg:max-h-[600px] object-contain"
                                 />
                             </div>
                         </div>
 
                         {/* Timer Info */}
-                        <div className="mt-4 text-center">
-                            <div className="inline-flex items-center gap-2 bg-blue-100 px-6 py-3 rounded-full">
-                                <Clock className="w-5 h-5 text-blue-700" />
-                                <span className="text-lg font-bold text-blue-900">
+                        <div className="mt-3 sm:mt-4 md:mt-6 text-center">
+                            <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-blue-100 px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 rounded-full">
+                                <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-blue-700 flex-shrink-0" />
+                                <span className="text-sm sm:text-base md:text-lg font-bold text-blue-900 whitespace-nowrap">
                                     Next code in: {timeLeft}s
                                 </span>
                             </div>
                         </div>
 
                         {/* Tap to close hint */}
-                        <p className="text-xs text-center text-slate-500 mt-4">
-                            Click anywhere outside to close
+                        <p className="text-[10px] sm:text-xs text-center text-slate-500 mt-2 sm:mt-3 md:mt-4">
+                            Tap anywhere outside to close
                         </p>
                     </div>
                 </div>
