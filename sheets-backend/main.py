@@ -1064,8 +1064,13 @@ async def logout(email: str = Depends(verify_token)):
 
 @app.get("/auth/me", response_model=UserResponse)
 async def get_current_user(email: str = Depends(verify_token)):
-    """Get current user info"""
+    """Get current user info - supports both teachers and students"""
+    # Try teacher first
     user = db.get_user_by_email(email)
+    
+    if not user:
+        # Try student
+        user = db.get_student_by_email(email)
     
     if not user:
         raise HTTPException(
@@ -1073,8 +1078,11 @@ async def get_current_user(email: str = Depends(verify_token)):
             detail="User not found"
         )
     
-    return UserResponse(id=user["id"], email=user["email"], name=user["name"])
-
+    return UserResponse(
+        id=user["id"], 
+        email=user["email"], 
+        name=user["name"]
+    )
 
 @app.delete("/auth/delete-account")
 async def delete_account(email: str = Depends(verify_token)):
