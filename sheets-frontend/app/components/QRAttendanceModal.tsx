@@ -480,8 +480,9 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                                 </div>
 
                                 {/* QR Code Display with Zoom Button */}
-                                <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg sm:rounded-xl md:rounded-2xl p-3 sm:p-4 md:p-6 text-center border-2 border-emerald-200 relative">
-                                    <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg sm:rounded-xl inline-block shadow-lg relative max-w-full">
+                                <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg sm:rounded-xl md:rounded-2xl p-3 sm:p-4 md:p-6 text-center border-2 border-emerald-200">
+                                    {/* QR Code */}
+                                    <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg sm:rounded-xl inline-block shadow-lg max-w-full">
                                         {qrCodeUrl && (
                                             <img 
                                                 src={qrCodeUrl} 
@@ -489,19 +490,21 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                                                 className="w-full max-w-[160px] sm:max-w-[224px] md:max-w-[256px] h-auto mx-auto"
                                             />
                                         )}
-                                        
-                                        {/* Zoom Button */}
-                                        <button
-                                            onClick={() => setIsZoomed(true)}
-                                            className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 p-1.5 sm:p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md sm:rounded-lg shadow-lg transition-all min-w-[32px] min-h-[32px] sm:min-w-[36px] sm:min-h-[36px] flex items-center justify-center"
-                                            title="Zoom QR Code"
-                                            aria-label="Zoom QR Code"
-                                        >
-                                            <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                                        </button>
                                     </div>
+                                    
+                                    {/* Zoom Button - Below QR Code */}
+                                    <button
+                                        onClick={() => setIsZoomed(true)}
+                                        className="mt-3 sm:mt-4 inline-flex items-center gap-2 px-4 sm:px-6 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg sm:rounded-xl shadow-lg hover:shadow-xl transition-all font-medium text-sm sm:text-base"
+                                        title="Zoom QR Code"
+                                        aria-label="Zoom QR Code"
+                                    >
+                                        <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                                        <span>Enlarge QR Code</span>
+                                    </button>
+                                    
                                     <p className="text-[10px] sm:text-xs text-emerald-700 mt-2 sm:mt-3 font-medium">
-                                        💡 Tap zoom to enlarge QR code
+                                        💡 Click to view full-screen QR code for easier scanning
                                     </p>
                                 </div>
 
@@ -592,7 +595,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                     >
                         
                         {/* QR Code Container - Reduced padding */}
-                        <div className="bg-white rounded-xl sm:rounded-2xl md:rounded-3xl p-2 sm:p-3 md:p-4 lg:p-4 shadow-2xl max-w-full">
+                        <div className="bg-white rounded-xl sm:rounded-2xl md:rounded-3xl p-3 sm:p-4 md:p-5 lg:p-6 shadow-2xl max-w-full">
                             <img 
                                 src={qrCodeUrl} 
                                 alt="QR Code" 
