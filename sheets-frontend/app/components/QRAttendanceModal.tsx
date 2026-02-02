@@ -523,60 +523,62 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 </div>
             </div>
 
-            {/* Zoomed QR Code Modal - FULLY RESPONSIVE */}
+            {/* Zoomed QR Code Modal - IMPROVED DESIGN */}
             {isZoomed && qrCodeUrl && (
                 <div 
-                    className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center z-[60] p-2 sm:p-4"
+                    className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[60] p-3 sm:p-4"
                     onClick={() => setIsZoomed(false)}
                 >
                     <div 
-                        className="relative bg-white rounded-xl sm:rounded-2xl p-3 sm:p-4 md:p-6 shadow-2xl w-full max-w-[95vw] sm:max-w-[90vw] md:max-w-3xl lg:max-w-4xl max-h-[95vh] flex flex-col"
+                        className="relative w-full max-w-[95vw] sm:max-w-xl md:max-w-2xl lg:max-w-3xl"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        {/* Close Button */}
+                        {/* Close Button - Floating */}
                         <button
                             onClick={() => setIsZoomed(false)}
-                            className="absolute top-2 right-2 sm:top-3 sm:right-3 md:top-4 md:right-4 p-1.5 sm:p-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-lg transition-all z-10"
+                            className="absolute -top-12 right-0 sm:-top-14 sm:right-0 p-2.5 sm:p-3 bg-rose-600 hover:bg-rose-700 text-white rounded-lg sm:rounded-xl shadow-xl transition-all z-10 flex items-center gap-2"
                             title="Close"
                         >
                             <Minimize2 className="w-5 h-5 sm:w-6 sm:h-6" />
+                            <span className="text-sm sm:text-base font-medium hidden sm:inline">Close</span>
                         </button>
 
-                        {/* Header */}
-                        <div className="text-center mb-3 sm:mb-4 md:mb-6 pr-10 sm:pr-12">
-                            <h3 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">
-                                Scan This QR Code
-                            </h3>
-                            <p className="text-xs sm:text-sm md:text-base text-slate-600">
-                                Point your camera at the QR code below
-                            </p>
-                        </div>
+                        {/* Main Content */}
+                        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden">
+                            {/* Header */}
+                            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 sm:px-6 py-4 sm:py-5 text-center">
+                                <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-white mb-1">
+                                    Scan This QR Code
+                                </h3>
+                                <p className="text-sm sm:text-base text-emerald-50">
+                                    Point your camera at the QR code below
+                                </p>
+                            </div>
 
-                        {/* Zoomed QR Code - Responsive Container */}
-                        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg sm:rounded-xl md:rounded-2xl p-4 sm:p-6 md:p-8 min-h-0">
-                            <div className="bg-white p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl shadow-xl max-w-full max-h-full flex items-center justify-center">
-                                <img 
-                                    src={qrCodeUrl} 
-                                    alt="QR Code - Zoomed" 
-                                    className="w-full h-full max-w-[280px] max-h-[280px] xs:max-w-[320px] xs:max-h-[320px] sm:max-w-[400px] sm:max-h-[400px] md:max-w-[500px] md:max-h-[500px] lg:max-w-[600px] lg:max-h-[600px] object-contain"
-                                />
+                            {/* QR Code - No extra containers, cleaner look */}
+                            <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-6 sm:p-8 md:p-12 flex items-center justify-center">
+                                <div className="bg-white p-5 sm:p-6 md:p-8 rounded-2xl shadow-2xl border-4 border-emerald-200">
+                                    <img 
+                                        src={qrCodeUrl} 
+                                        alt="QR Code - Zoomed" 
+                                        className="w-[300px] h-[300px] sm:w-[350px] sm:h-[350px] md:w-[420px] md:h-[420px] lg:w-[480px] lg:h-[480px] mx-auto"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Timer - Clean bottom section */}
+                            <div className="bg-white border-t-2 border-emerald-100 px-4 sm:px-6 py-4 sm:py-5 text-center">
+                                <div className="inline-flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-5 sm:px-6 md:px-8 py-3 sm:py-3.5 rounded-full shadow-lg">
+                                    <Clock className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+                                    <span className="text-base sm:text-lg md:text-xl font-bold whitespace-nowrap">
+                                        Next code in: {timeLeft}s
+                                    </span>
+                                </div>
+                                <p className="text-xs sm:text-sm text-slate-500 mt-3 sm:mt-4">
+                                    Tap anywhere outside to close
+                                </p>
                             </div>
                         </div>
-
-                        {/* Timer Info */}
-                        <div className="mt-3 sm:mt-4 md:mt-6 text-center">
-                            <div className="inline-flex items-center gap-1.5 sm:gap-2 bg-blue-100 px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 rounded-full">
-                                <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-blue-700 flex-shrink-0" />
-                                <span className="text-sm sm:text-base md:text-lg font-bold text-blue-900 whitespace-nowrap">
-                                    Next code in: {timeLeft}s
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Tap to close hint */}
-                        <p className="text-[10px] sm:text-xs text-center text-slate-500 mt-2 sm:mt-3 md:mt-4">
-                            Tap anywhere outside to close
-                        </p>
                     </div>
                 </div>
             )}
