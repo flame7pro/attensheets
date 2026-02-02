@@ -27,14 +27,27 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
     const html5QrRef = useRef<Html5Qrcode | null>(null);
     const isCleaningUpRef = useRef<boolean>(false);
     const isScanningRef = useRef<boolean>(false);
+    const processingRef = useRef<boolean>(false);
+    const selectedClassRef = useRef<string>('');
+
+    // Keep refs in sync
+    useEffect(() => {
+        processingRef.current = processing;
+    }, [processing]);
+
+    useEffect(() => {
+        selectedClassRef.current = selectedClass;
+    }, [selectedClass]);
 
     const stopScanning = useCallback(() => {
         setScanning(false);
         setProcessing(false);
     }, []);
 
+    // Stable callback that doesn't change on re-renders
     const onScanSuccess = useCallback(async (decodedText: string) => {
-        if (processing || isCleaningUpRef.current) return;
+        if (processingRef.current || isCleaningUpRef.current) return;
+        processingRef.current = true;
         setProcessing(true);
 
         console.log('[STUDENT SCANNER] ='.repeat(30));
@@ -52,9 +65,9 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     success: false,
                     message: 'Invalid QR code format',
                 });
-                // Allow retry after 2 seconds
                 setTimeout(() => {
                     setResult(null);
+                    processingRef.current = false;
                     setProcessing(false);
                 }, 2000);
                 return;
@@ -68,12 +81,13 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 });
                 setTimeout(() => {
                     setResult(null);
+                    processingRef.current = false;
                     setProcessing(false);
                 }, 2000);
                 return;
             }
 
-            if (qrData.class_id !== selectedClass) {
+            if (qrData.class_id !== selectedClassRef.current) {
                 console.error('[STUDENT SCANNER] ❌ Class mismatch');
                 setResult({
                     success: false,
@@ -81,6 +95,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 });
                 setTimeout(() => {
                     setResult(null);
+                    processingRef.current = false;
                     setProcessing(false);
                 }, 2000);
                 return;
@@ -98,6 +113,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 });
                 setTimeout(() => {
                     setResult(null);
+                    processingRef.current = false;
                     setProcessing(false);
                 }, 2000);
                 return;
@@ -130,7 +146,8 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
             
             // Close everything smoothly after 2.5 seconds
             setTimeout(() => {
-                stopScanning();
+                setScanning(false);
+                setProcessing(false);
                 onClose();
             }, 2500);
 
@@ -142,13 +159,15 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
             });
             setTimeout(() => {
                 setResult(null);
+                processingRef.current = false;
                 setProcessing(false);
             }, 2000);
         } finally {
             console.log('[STUDENT SCANNER] ='.repeat(30));
         }
-    }, [processing, selectedClass, onClose, stopScanning]);
+    }, [onClose]); // Only depends on onClose, which is stable
 
+    // Stable failure callback
     const onScanFailure = useCallback((_error: string) => {
         // Ignore scan failures
     }, []);
@@ -329,7 +348,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     }
                 });
         };
-    }, [scanning, onScanSuccess, onScanFailure]);
+    }, [scanning]); // Only depend on scanning - callbacks are now stable!
 
     const startScanning = () => {
         if (!selectedClass) {
