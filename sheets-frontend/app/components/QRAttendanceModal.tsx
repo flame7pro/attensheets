@@ -1,7 +1,7 @@
-// QRAttendanceModal.tsx - COMPLETE UNIFIED TIMER FIX
+// QRAttendanceModal.tsx - WITH QR CODE ZOOM FEATURE
 
 import React, { useState, useEffect, useRef } from 'react';
-import { X, QrCode, Users, Clock, Zap, CheckCircle, Calendar } from 'lucide-react';
+import { X, QrCode, Users, Clock, Zap, CheckCircle, Calendar, Maximize2, Minimize2 } from 'lucide-react';
 import QRCode from 'qrcode';
 
 interface QRAttendanceModalProps {
@@ -27,6 +27,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
     const [isStopping, setIsStopping] = useState<boolean>(false);
     const [timeLeft, setTimeLeft] = useState(5);
     const [sessionNumber, setSessionNumber] = useState<number>(1);
+    const [isZoomed, setIsZoomed] = useState<boolean>(false);
     const [notification, setNotification] = useState<{
         type: 'success' | 'error' | 'info';
         message: string;
@@ -210,7 +211,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             }
             clearInterval(pollIntervalId);
         };
-    }, [isActive, classId, currentDate, currentCode]); // ✅ Dependencies
+    }, [isActive, classId, currentDate, currentCode]);
 
     const stopSession = async () => {
         setIsStopping(true);
@@ -258,236 +259,305 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">
-            <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-[95vw] sm:max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-                {/* Header */}
-                <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 sm:px-6 py-3 sm:py-5 flex-shrink-0">
-                    <div className="flex-1">
-                        <h2 className="text-lg sm:text-2xl font-bold text-white">QR Code Attendance</h2>
-                        <p className="text-emerald-50 text-xs sm:text-sm mt-0.5 sm:mt-1 truncate">{className}</p>
+        <>
+            {/* Main Modal */}
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">
+                <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-[95vw] sm:max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                    {/* Header */}
+                    <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 sm:px-6 py-3 sm:py-5 flex-shrink-0">
+                        <div className="flex-1">
+                            <h2 className="text-lg sm:text-2xl font-bold text-white">QR Code Attendance</h2>
+                            <p className="text-emerald-50 text-xs sm:text-sm mt-0.5 sm:mt-1 truncate">{className}</p>
+                        </div>
                     </div>
-                </div>
 
-                {/* Date Display */}
-                <div className="bg-emerald-50 border-b border-emerald-200 px-4 sm:px-6 py-2 sm:py-3 flex-shrink-0">
-                    <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-700" />
-                        <span className="text-sm sm:text-base font-semibold text-emerald-900">
-                            {new Date(currentDate).toLocaleDateString('en-US', {
-                                weekday: 'long',
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric'
-                            })}
-                        </span>
-                    </div>
-                </div>
-
-                {/* Notification Banner */}
-                {notification && (
-                    <div
-                        className={`px-4 sm:px-6 py-3 flex items-center justify-between gap-3 ${
-                            notification.type === 'success'
-                                ? 'bg-emerald-50 border-b border-emerald-200'
-                                : notification.type === 'error'
-                                ? 'bg-rose-50 border-b border-rose-200'
-                                : 'bg-blue-50 border-b border-blue-200'
-                        }`}
-                    >
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                            {notification.type === 'success' && (
-                                <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                            )}
-                            {notification.type === 'error' && (
-                                <X className="w-5 h-5 text-rose-600 flex-shrink-0" />
-                            )}
-                            {notification.type === 'info' && (
-                                <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                            )}
-                            <span
-                                className={`text-sm font-medium ${
-                                    notification.type === 'success'
-                                        ? 'text-emerald-800'
-                                        : notification.type === 'error'
-                                        ? 'text-rose-800'
-                                        : 'text-blue-800'
-                                }`}
-                            >
-                                {notification.message}
+                    {/* Date Display */}
+                    <div className="bg-emerald-50 border-b border-emerald-200 px-4 sm:px-6 py-2 sm:py-3 flex-shrink-0">
+                        <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-700" />
+                            <span className="text-sm sm:text-base font-semibold text-emerald-900">
+                                {new Date(currentDate).toLocaleDateString('en-US', {
+                                    weekday: 'long',
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                })}
                             </span>
                         </div>
-                        <button
-                            onClick={() => setNotification(null)}
-                            className={`p-1 rounded-lg transition-colors flex-shrink-0 ${
+                    </div>
+
+                    {/* Notification Banner */}
+                    {notification && (
+                        <div
+                            className={`px-4 sm:px-6 py-3 flex items-center justify-between gap-3 ${
                                 notification.type === 'success'
-                                    ? 'hover:bg-emerald-200'
+                                    ? 'bg-emerald-50 border-b border-emerald-200'
                                     : notification.type === 'error'
-                                    ? 'hover:bg-rose-200'
-                                    : 'hover:bg-blue-200'
+                                    ? 'bg-rose-50 border-b border-rose-200'
+                                    : 'bg-blue-50 border-b border-blue-200'
                             }`}
                         >
-                            <X
-                                className={`w-4 h-4 ${
-                                    notification.type === 'success'
-                                        ? 'text-emerald-600'
-                                        : notification.type === 'error'
-                                        ? 'text-rose-600'
-                                        : 'text-blue-600'
-                                }`}
-                            />
-                        </button>
-                    </div>
-                )}
-
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
-                    {!isActive ? (
-                        /* Setup Screen */
-                        <div className="space-y-6">
-                            <div className="text-center">
-                                <div className="w-20 h-20 sm:w-24 sm:h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                    <QrCode className="w-10 h-10 sm:w-12 sm:h-12 text-emerald-600" />
-                                </div>
-                                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">
-                                    Start QR Attendance
-                                </h3>
-                                <p className="text-sm sm:text-base text-slate-600">
-                                    Students will scan the QR code to mark their attendance
-                                </p>
-                            </div>
-
-                            {/* QR Settings */}
-                            <div className="bg-slate-50 rounded-xl p-4 sm:p-6">
-                                <label className="block text-sm font-semibold text-slate-700 mb-3">
-                                    QR Code Rotation Interval
-                                </label>
-                                <div className="flex items-center gap-4">
-                                    <input
-                                        type="range"
-                                        min="3"
-                                        max="30"
-                                        value={rotationInterval}
-                                        onChange={(e) => {
-                                            const newInterval = Number(e.target.value);
-                                            setRotationInterval(newInterval);
-                                            setTimeLeft(newInterval);
-                                        }}
-                                        className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-                                    />
-                                    <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border-2 border-emerald-500">
-                                        <Clock className="w-4 h-4 text-emerald-600" />
-                                        <span className="font-bold text-emerald-900">{rotationInterval}s</span>
-                                    </div>
-                                </div>
-                                <p className="text-xs text-slate-500 mt-3">
-                                    The QR code will change every {rotationInterval} seconds for security
-                                </p>
-                            </div>
-
-                            <button
-                                onClick={startSession}
-                                className="w-full px-6 sm:px-8 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
-                            >
-                                <Zap className="w-5 h-5" />
-                                Start QR Session
-                            </button>
-                        </div>
-                    ) : (
-                        /* Active Session Screen */
-                        <div className="space-y-4 sm:space-y-6">
-                            {/* Session Info */}
-                            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <Clock className="w-4 h-4 text-emerald-700" />
-                                    <span className="text-xs font-semibold text-emerald-700 uppercase">
-                                        Active Session #{sessionNumber}
-                                    </span>
-                                </div>
-                                <p className="text-lg font-bold text-emerald-900">QR Attendance for {new Date(currentDate).toLocaleDateString()}</p>
-                            </div>
-
-                            {/* Stats */}
-                            <div className="grid grid-cols-3 gap-2 sm:gap-4">
-                                <div className="bg-emerald-50 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-emerald-200">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <CheckCircle className="w-4 h-4 text-emerald-600" />
-                                        <span className="text-xs font-semibold text-emerald-700 uppercase">
-                                            Scanned
-                                        </span>
-                                    </div>
-                                    <p className="text-2xl sm:text-3xl font-bold text-emerald-900">{scannedCount}</p>
-                                </div>
-
-                                <div className="bg-slate-50 rounded-xl p-3 sm:p-4 border border-slate-200">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <Users className="w-4 h-4 text-slate-600" />
-                                        <span className="text-xs font-semibold text-slate-700 uppercase">
-                                            Total
-                                        </span>
-                                    </div>
-                                    <p className="text-2xl sm:text-3xl font-bold text-slate-900">{totalStudents}</p>
-                                </div>
-
-                                <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border border-blue-200">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <Clock className="w-4 h-4 text-blue-600" />
-                                        <span className="text-xs font-semibold text-blue-700 uppercase">
-                                            Next Code
-                                        </span>
-                                    </div>
-                                    <p className="text-2xl sm:text-3xl font-bold text-blue-900">{timeLeft}s</p>
-                                </div>
-                            </div>
-
-                            {/* QR Code Display */}
-                            <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-8 text-center border-2 border-emerald-200">
-                                <div className="bg-white p-4 sm:p-6 rounded-xl sm:rounded-2xl inline-block shadow-lg">
-                                    {qrCodeUrl && <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 mx-auto" />}
-                                </div>
-                            </div>
-
-                            {/* Instructions */}
-                            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4">
-                                <h4 className="font-semibold text-blue-900 text-sm mb-2">
-                                    📱 Instructions for Students
-                                </h4>
-                                <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
-                                    <li>Tap "Scan QR Code" in student dashboard</li>
-                                    <li>Select this class from the list</li>
-                                    <li>Point camera at QR code above</li>
-                                    <li>Hold steady until scanned ✅</li>
-                                    <li>Attendance marked automatically</li>
-                                </ol>
-                            </div>
-
-                            {/* Stop Button */}
-                            <button
-                                onClick={stopSession}
-                                disabled={isStopping}
-                                className="w-full px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl shadow-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                            >
-                                {isStopping ? (
-                                    <>
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                        Stopping Session...
-                                    </>
-                                ) : (
-                                    <>
-                                        <X className="w-5 h-5" />
-                                        Stop Session & Mark Absent
-                                    </>
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                {notification.type === 'success' && (
+                                    <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                                 )}
+                                {notification.type === 'error' && (
+                                    <X className="w-5 h-5 text-rose-600 flex-shrink-0" />
+                                )}
+                                {notification.type === 'info' && (
+                                    <svg className="w-5 h-5 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                )}
+                                <span
+                                    className={`text-sm font-medium ${
+                                        notification.type === 'success'
+                                            ? 'text-emerald-800'
+                                            : notification.type === 'error'
+                                            ? 'text-rose-800'
+                                            : 'text-blue-800'
+                                    }`}
+                                >
+                                    {notification.message}
+                                </span>
+                            </div>
+                            <button
+                                onClick={() => setNotification(null)}
+                                className={`p-1 rounded-lg transition-colors flex-shrink-0 ${
+                                    notification.type === 'success'
+                                        ? 'hover:bg-emerald-200'
+                                        : notification.type === 'error'
+                                        ? 'hover:bg-rose-200'
+                                        : 'hover:bg-blue-200'
+                                }`}
+                            >
+                                <X
+                                    className={`w-4 h-4 ${
+                                        notification.type === 'success'
+                                            ? 'text-emerald-600'
+                                            : notification.type === 'error'
+                                            ? 'text-rose-600'
+                                            : 'text-blue-600'
+                                    }`}
+                                />
                             </button>
-
-                            <p className="text-xs text-center text-slate-500">
-                                ⏰ Students who haven't scanned will be automatically marked as Absent
-                            </p>
                         </div>
                     )}
+
+                    {/* Content */}
+                    <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8">
+                        {!isActive ? (
+                            /* Setup Screen */
+                            <div className="space-y-6">
+                                <div className="text-center">
+                                    <div className="w-20 h-20 sm:w-24 sm:h-24 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <QrCode className="w-10 h-10 sm:w-12 sm:h-12 text-emerald-600" />
+                                    </div>
+                                    <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-2">
+                                        Start QR Attendance
+                                    </h3>
+                                    <p className="text-sm sm:text-base text-slate-600">
+                                        Students will scan the QR code to mark their attendance
+                                    </p>
+                                </div>
+
+                                {/* QR Settings */}
+                                <div className="bg-slate-50 rounded-xl p-4 sm:p-6">
+                                    <label className="block text-sm font-semibold text-slate-700 mb-3">
+                                        QR Code Rotation Interval
+                                    </label>
+                                    <div className="flex items-center gap-4">
+                                        <input
+                                            type="range"
+                                            min="3"
+                                            max="30"
+                                            value={rotationInterval}
+                                            onChange={(e) => {
+                                                const newInterval = Number(e.target.value);
+                                                setRotationInterval(newInterval);
+                                                setTimeLeft(newInterval);
+                                            }}
+                                            className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                                        />
+                                        <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-lg border-2 border-emerald-500">
+                                            <Clock className="w-4 h-4 text-emerald-600" />
+                                            <span className="font-bold text-emerald-900">{rotationInterval}s</span>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-3">
+                                        The QR code will change every {rotationInterval} seconds for security
+                                    </p>
+                                </div>
+
+                                <button
+                                    onClick={startSession}
+                                    className="w-full px-6 sm:px-8 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
+                                >
+                                    <Zap className="w-5 h-5" />
+                                    Start QR Session
+                                </button>
+                            </div>
+                        ) : (
+                            /* Active Session Screen */
+                            <div className="space-y-4 sm:space-y-6">
+                                {/* Session Info */}
+                                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <Clock className="w-4 h-4 text-emerald-700" />
+                                        <span className="text-xs font-semibold text-emerald-700 uppercase">
+                                            Active Session #{sessionNumber}
+                                        </span>
+                                    </div>
+                                    <p className="text-lg font-bold text-emerald-900">QR Attendance for {new Date(currentDate).toLocaleDateString()}</p>
+                                </div>
+
+                                {/* Stats */}
+                                <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                                    <div className="bg-emerald-50 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-emerald-200">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <CheckCircle className="w-4 h-4 text-emerald-600" />
+                                            <span className="text-xs font-semibold text-emerald-700 uppercase">
+                                                Scanned
+                                            </span>
+                                        </div>
+                                        <p className="text-2xl sm:text-3xl font-bold text-emerald-900">{scannedCount}</p>
+                                    </div>
+
+                                    <div className="bg-slate-50 rounded-xl p-3 sm:p-4 border border-slate-200">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <Users className="w-4 h-4 text-slate-600" />
+                                            <span className="text-xs font-semibold text-slate-700 uppercase">
+                                                Total
+                                            </span>
+                                        </div>
+                                        <p className="text-2xl sm:text-3xl font-bold text-slate-900">{totalStudents}</p>
+                                    </div>
+
+                                    <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border border-blue-200">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <Clock className="w-4 h-4 text-blue-600" />
+                                            <span className="text-xs font-semibold text-blue-700 uppercase">
+                                                Next Code
+                                            </span>
+                                        </div>
+                                        <p className="text-2xl sm:text-3xl font-bold text-blue-900">{timeLeft}s</p>
+                                    </div>
+                                </div>
+
+                                {/* QR Code Display with Zoom Button */}
+                                <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl sm:rounded-2xl p-4 sm:p-6 md:p-8 text-center border-2 border-emerald-200 relative">
+                                    <div className="bg-white p-4 sm:p-6 rounded-xl sm:rounded-2xl inline-block shadow-lg relative">
+                                        {qrCodeUrl && <img src={qrCodeUrl} alt="QR Code" className="w-48 h-48 sm:w-56 sm:h-56 md:w-64 md:h-64 mx-auto" />}
+                                        
+                                        {/* Zoom Button */}
+                                        <button
+                                            onClick={() => setIsZoomed(true)}
+                                            className="absolute top-2 right-2 p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-lg transition-all group"
+                                            title="Zoom QR Code"
+                                        >
+                                            <Maximize2 className="w-5 h-5" />
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-emerald-700 mt-3 font-medium">
+                                        💡 Click the zoom button to enlarge QR code
+                                    </p>
+                                </div>
+
+                                {/* Instructions */}
+                                <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 sm:p-4">
+                                    <h4 className="font-semibold text-blue-900 text-sm mb-2">
+                                        📱 Instructions for Students
+                                    </h4>
+                                    <ol className="text-xs text-blue-800 space-y-1 list-decimal list-inside">
+                                        <li>Tap "Scan QR Code" in student dashboard</li>
+                                        <li>Select this class from the list</li>
+                                        <li>Point camera at QR code above</li>
+                                        <li>Hold steady until scanned ✅</li>
+                                        <li>Attendance marked automatically</li>
+                                    </ol>
+                                </div>
+
+                                {/* Stop Button */}
+                                <button
+                                    onClick={stopSession}
+                                    disabled={isStopping}
+                                    className="w-full px-6 py-3 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl shadow-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    {isStopping ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                            Stopping Session...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <X className="w-5 h-5" />
+                                            Stop Session & Mark Absent
+                                        </>
+                                    )}
+                                </button>
+
+                                <p className="text-xs text-center text-slate-500">
+                                    ⏰ Students who haven't scanned will be automatically marked as Absent
+                                </p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
-        </div>
+
+            {/* Zoomed QR Code Modal */}
+            {isZoomed && qrCodeUrl && (
+                <div 
+                    className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4"
+                    onClick={() => setIsZoomed(false)}
+                >
+                    <div 
+                        className="relative bg-white rounded-2xl p-6 shadow-2xl max-w-[90vw] max-h-[90vh] flex flex-col"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Close Button */}
+                        <button
+                            onClick={() => setIsZoomed(false)}
+                            className="absolute top-4 right-4 p-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg shadow-lg transition-all z-10"
+                            title="Close"
+                        >
+                            <Minimize2 className="w-6 h-6" />
+                        </button>
+
+                        {/* Header */}
+                        <div className="text-center mb-4">
+                            <h3 className="text-2xl font-bold text-slate-900 mb-1">Scan This QR Code</h3>
+                            <p className="text-sm text-slate-600">Point your camera at the QR code below</p>
+                        </div>
+
+                        {/* Zoomed QR Code */}
+                        <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl p-8">
+                            <div className="bg-white p-8 rounded-2xl shadow-xl">
+                                <img 
+                                    src={qrCodeUrl} 
+                                    alt="QR Code - Zoomed" 
+                                    className="w-[400px] h-[400px] sm:w-[500px] sm:h-[500px] mx-auto"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Timer Info */}
+                        <div className="mt-4 text-center">
+                            <div className="inline-flex items-center gap-2 bg-blue-100 px-6 py-3 rounded-full">
+                                <Clock className="w-5 h-5 text-blue-700" />
+                                <span className="text-lg font-bold text-blue-900">
+                                    Next code in: {timeLeft}s
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Tap to close hint */}
+                        <p className="text-xs text-center text-slate-500 mt-4">
+                            Click anywhere outside to close
+                        </p>
+                    </div>
+                </div>
+            )}
+        </>
     );
 };
