@@ -188,48 +188,54 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
   const handleSaveMultiSession = async () => {
     console.log('=== SAVE MULTI-SESSION DEBUG START ===');
     
-    // 1. Log what we have
-    console.log('Selected Student ID:', selectedStudent);
-    console.log('Active Class:', activeClass);
-    console.log('All Students:', activeClass?.students);
-    
-    // 2. Find the actual student object
-    const student = activeClass?.students?.find(s => s.id === selectedStudent);
-    console.log('Found Student Object:', student);
-    
-    if (!student) {
-      console.error('❌ STUDENT NOT FOUND!');
-      alert('Student not found. selectedStudent: ' + selectedStudent);
-      return;
-    }
-    
-    // 3. Log the student.id (this should be a string like "class_1_student_1")
-    console.log('Student Record ID (student.id):', student.id);
-    console.log('Type of student.id:', typeof student.id);
-    
-    // 4. Prepare sessions data
-    const sessions = Object.entries(multiSessionAttendance).map(([sessionNumber, status]) => ({
-      session_number: parseInt(sessionNumber),
-      status: status
-    }));
-    
-    console.log('Sessions Data:', sessions);
-    
-    // 5. Create the payload
-    const payload = {
-      student_id: student.id,  // ✅ This MUST be the string ID like "class_1_student_1"
-      date: multiSessionDate,
-      sessions: sessions
-    };
-    
-    console.log('📤 PAYLOAD BEING SENT:', JSON.stringify(payload, null, 2));
-    console.log('Type of payload.student_id:', typeof payload.student_id);
-    
     try {
-      const token = localStorage.getItem('token');
-      console.log('Token exists:', !!token);
+      // 1. Find the actual student object
+      const student = activeClass?.students?.find(s => s.id === selectedStudent);
       
-      const url = `https://lernova-api.vercel.app/classes/${activeClass.id}/attendance/multi-session`;
+      if (!student) {
+        console.error('❌ Student not found. selectedStudent:', selectedStudent);
+        alert('Student not found');
+        return;
+      }
+      
+      console.log('✅ Found student:', student);
+      console.log('Student ID (should be string):', student.id, typeof student.id);
+      
+      // 2. ✅ FIX: Use multiSessionCurrentData (not multiSessionAttendance)
+      // Filter out sessions with null status and convert to the format backend expects
+      const sessions = multiSessionCurrentData
+        .filter(session => session.status !== null)
+        .map((session, index) => ({
+          session_number: index + 1,
+          status: session.status
+        }));
+      
+      console.log('Sessions to save:', sessions);
+      
+      if (sessions.length === 0) {
+        alert('Please mark attendance for at least one session');
+        return;
+      }
+      
+      // 3. Create payload
+      const payload = {
+        student_id: student.id,  // ✅ This is the string ID like "class_1_student_1"
+        date: multiSessionDate,
+        sessions: sessions
+      };
+      
+      console.log('📤 Sending payload:', JSON.stringify(payload, null, 2));
+      console.log('Type of student_id:', typeof payload.student_id);
+      
+      // 4. Send request
+      const token = localStorage.getItem('access_token');
+      
+      if (!token) {
+        alert('No authentication token found. Please log in again.');
+        return;
+      }
+      
+      const url = `${process.env.NEXT_PUBLIC_API_URL}/classes/${activeClass.id}/attendance/multi-session`;
       console.log('Request URL:', url);
       
       const response = await fetch(url, {
@@ -242,54 +248,52 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       });
   
       console.log('Response Status:', response.status);
-      console.log('Response OK:', response.ok);
       
       const responseData = await response.json();
-      console.log('📥 RESPONSE DATA:', responseData);
+      console.log('📥 Response Data:', responseData);
   
       if (!response.ok) {
-        console.error('❌ REQUEST FAILED');
-        console.error('Status:', response.status);
-        console.error('Response:', responseData);
+        console.error('❌ Request failed');
         
-        // Show the ACTUAL error message
+        // Parse the actual error
         let errorMessage = 'Unknown error';
         if (responseData.detail) {
           if (typeof responseData.detail === 'string') {
             errorMessage = responseData.detail;
           } else if (Array.isArray(responseData.detail)) {
             errorMessage = responseData.detail.map(err => 
-              `${err.loc?.join('.')} - ${err.msg}`
+              `Field: ${err.loc?.join('.')} - ${err.msg}${err.input ? ` (got: ${JSON.stringify(err.input)})` : ''}`
             ).join('\n');
           } else {
-            errorMessage = JSON.stringify(responseData.detail);
+            errorMessage = JSON.stringify(responseData.detail, null, 2);
           }
         }
         
+        console.error('Error details:', errorMessage);
         alert('Failed to save attendance:\n\n' + errorMessage);
         throw new Error(errorMessage);
       }
   
       console.log('✅ SUCCESS!');
+      
+      // Close modal
+      setShowMultiSessionModal(false);
+      setSelectedStudent(null);
+      setSelectedDay(null);
+      setMultiSessionCurrentData([]);
+      
+      // Refresh class data from backend
+      await refreshClassData();
+      
       alert('Attendance saved successfully!');
       
-      // Reset the form
-      setIsMultiSessionModalOpen(false);
-      setSelectedStudent(null);
-      setMultiSessionAttendance({});
-      
-      // Refresh the class data
-      fetchClasses();
-      
     } catch (error) {
-      console.error('💥 EXCEPTION CAUGHT:', error);
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
+      console.error('💥 Exception:', error);
+      alert('Error: ' + error.message);
     }
     
     console.log('=== SAVE MULTI-SESSION DEBUG END ===');
   };
-
   const handleCloseMultiSession = () => {
     setShowMultiSessionModal(false);
     setSelectedDay(null);
