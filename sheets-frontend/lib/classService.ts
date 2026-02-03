@@ -1,5 +1,4 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-
 import { Class } from '@/types';
 
 export interface AttendanceCounts {
@@ -19,7 +18,6 @@ class ClassService {
 
   private async apiCall<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
     let response: Response;
-
     try {
       response = await fetch(`${API_URL}${endpoint}`, {
         ...options,
@@ -29,17 +27,13 @@ class ClassService {
         },
       });
     } catch (err) {
-      // Browser network errors (CORS blocked, backend down, connection reset) surface as TypeError("Failed to fetch").
-      // Provide a more actionable message.
       const hint = `Network error calling ${API_URL}${endpoint}. Is the backend running on port 8000 and CORS allowing this origin?`;
       throw new Error(hint);
     }
-
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.detail || error.message || `API Error: ${response.statusText}`);
     }
-
     return response.json();
   }
 
@@ -105,7 +99,6 @@ class ClassService {
     try {
       const backendClasses = await this.getAllClasses();
       const backendClassIds = new Set(backendClasses.map(c => c.id));
-
       for (const localClass of localClasses) {
         if (!backendClassIds.has(localClass.id)) {
           await this.createClass(localClass);
@@ -113,7 +106,6 @@ class ClassService {
           await this.updateClass(String(localClass.id), localClass);
         }
       }
-
       return await this.getAllClasses();
     } catch (error) {
       console.error('Error syncing classes:', error);
