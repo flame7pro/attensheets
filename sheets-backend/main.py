@@ -1810,103 +1810,109 @@ async def update_class(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to update class: {str(e)}")
 
-@app.put("/classes/{class_id}/attendance/multi-session")  # ✅ Changed from POST to PUT
+@app.put("/classes/{class_id}/attendance/multi-session")
 async def update_multi_session_attendance(
     class_id: str,
     request: MultiSessionAttendanceUpdate,
     email: str = Depends(verify_token)
 ):
+    print("\n" + "="*80)
+    print("[BACKEND] MULTI-SESSION REQUEST RECEIVED")
+    print("="*80)
+    print(f"[BACKEND] Class ID: {class_id} (type: {type(class_id)})")
+    print(f"[BACKEND] Student ID: {request.student_id} (type: {type(request.student_id)})")
+    print(f"[BACKEND] Date: {request.date}")
+    print(f"[BACKEND] Sessions: {len(request.sessions)}")
+    for i, s in enumerate(request.sessions, 1):
+        print(f"  Session {i}: {s.name} = {s.status}")
+    print("="*80)
+    
     try:
-        print("\n" + "="*80)
-        print("[MULTI_SESSION] REQUEST RECEIVED")
-        print(f"  Class ID: {class_id}")
-        print(f"  Student ID: {request.student_id}")
-        print(f"  Date: {request.date}")
-        print(f"  Sessions: {request.sessions}")
-        print("="*80 + "\n")
-        
         # Get user
         user = db.get_user_by_email(email)
         if not user:
+            print("[BACKEND] ❌ User not found")
             raise HTTPException(status_code=404, detail="User not found")
         
-        # ✅ NEW: Filter sessions BEFORE validation (allow null status during transit)
+        print(f"[BACKEND] ✅ User: {user['name']} ({user['id']})")
+        
+        # Filter sessions with valid status
         valid_sessions = [
             s for s in request.sessions 
             if s.status is not None and s.status in ['P', 'A', 'L']
         ]
         
-        print(f"[MULTI_SESSION] Valid sessions after filtering: {valid_sessions}")
+        print(f"[BACKEND] 📝 Valid sessions after filtering: {len(valid_sessions)}")
         
         if not valid_sessions:
+            print("[BACKEND] ❌ No valid sessions")
             raise HTTPException(
                 status_code=400,
                 detail="No valid sessions provided. At least one session must have P, A, or L status."
             )
         
-        # Get existing class data
+        # Get class data
         class_data = db.get_class(user["id"], str(class_id))
         if not class_data:
+            print(f"[BACKEND] ❌ Class not found: {class_id}")
             raise HTTPException(status_code=404, detail="Class not found")
         
-        print(f"[MULTI_SESSION] Class found: {class_data.get('name')}")
-        print(f"[MULTI_SESSION] Enrollment mode: {class_data.get('enrollment_mode')}")
-        print(f"[MULTI_SESSION] Total students in class: {len(class_data.get('students', []))}")
+        print(f"[BACKEND] ✅ Class found: {class_data.get('name')}")
+        print(f"[BACKEND] 📊 Enrollment mode: {class_data.get('enrollment_mode')}")
+        print(f"[BACKEND] 👥 Total students: {len(class_data.get('students', []))}")
         
-        # ✅ CRITICAL FIX: Handle student ID matching for ALL enrollment modes
+        # Find student
         student_found = False
         student_record = None
-        
         enrollment_mode = class_data.get('enrollment_mode', 'manual_entry')
         
-        print(f"[MULTI_SESSION] Looking for student_id: {request.student_id}")
-        print(f"[MULTI_SESSION] Student IDs in class:")
-        for s in class_data.get('students', []):
-            print(f"  - {s.get('name')}: id={s.get('id')} (type: {type(s.get('id'))})")
+        print(f"\n[BACKEND] 🔍 Searching for student: {request.student_id}")
+        print(f"[BACKEND] 📋 Students in class:")
         
-        for student in class_data['students']:
+        for idx, student in enumerate(class_data.get('students', []), 1):
             student_id = student.get('id')
+            print(f"  {idx}. {student.get('name'):20s} | ID: {student_id} (type: {type(student_id).__name__})")
             
-            # ✅ UNIVERSAL MATCHING LOGIC
-            # Try multiple matching strategies to handle all formats:
+            # Try matching with multiple strategies
+            match_direct = (str(student_id) == str(request.student_id))
+            match_record = (student.get('student_record_id') == request.student_id)
             
-            # Strategy 1: Direct string match
-            if str(student_id) == str(request.student_id):
+            if match_direct or match_record:
                 student_found = True
                 student_record = student
-                print(f"[MULTI_SESSION] ✅ MATCH FOUND (Direct match)")
+                match_type = 'direct ID' if match_direct else 'student_record_id'
+                print(f"\n[BACKEND] ✅ MATCH FOUND!")
+                print(f"  Student: {student.get('name')}")
+                print(f"  Match type: {match_type}")
+                print(f"  Student ID in class: {student_id}")
+                print(f"  Received student_id: {request.student_id}")
                 break
-            
-            # Strategy 2: For enrollment_via_id mode, check if student has email/enrollment
-            if enrollment_mode in ('enrollment_via_id', 'link_based_enrollment'):
-                # In this mode, student.id should be "classId_student_X" format
-                # But let's also check if student_record_id exists
-                if student.get('student_record_id') == request.student_id:
-                    student_found = True
-                    student_record = student
-                    print(f"[MULTI_SESSION] ✅ MATCH FOUND (student_record_id match)")
-                    break
         
         if not student_found or not student_record:
-            print(f"[MULTI_SESSION] ❌ STUDENT NOT FOUND")
-            print(f"  Looking for: {request.student_id}")
+            print(f"\n[BACKEND] ❌ STUDENT NOT FOUND")
+            print(f"  Looking for: {request.student_id} (type: {type(request.student_id)})")
             print(f"  Enrollment mode: {enrollment_mode}")
-            print(f"  Available student IDs:")
-            for s in class_data.get('students', []):
-                print(f"    - {s.get('name')}: {s.get('id')}")
+            print(f"  Total students searched: {len(class_data.get('students', []))}")
             
             raise HTTPException(
                 status_code=404,
                 detail=f"Student with ID {request.student_id} not found in class {class_id}"
             )
         
-        print(f"[MULTI_SESSION] ✅ Found student: {student_record.get('name')}")
-        
-        # Initialize attendance dict if needed
+        # Initialize attendance if needed
         if 'attendance' not in student_record:
             student_record['attendance'] = {}
+            print(f"[BACKEND] 📝 Initialized attendance dict for {student_record.get('name')}")
         
-        # ✅ Save attendance in NEW FORMAT (always use sessions array)
+        # Check what was there before
+        old_value = student_record['attendance'].get(request.date)
+        print(f"\n[BACKEND] 📋 Attendance before update:")
+        if old_value:
+            print(f"  {request.date}: {old_value}")
+        else:
+            print(f"  {request.date}: (not set)")
+        
+        # Save attendance in NEW FORMAT
         student_record['attendance'][request.date] = {
             'sessions': [
                 {
@@ -1919,26 +1925,35 @@ async def update_multi_session_attendance(
             'updated_at': datetime.now(timezone.utc).isoformat()
         }
         
-        print(f"[MULTI_SESSION] ✅ Updated attendance for {request.date}")
-        print(f"[MULTI_SESSION] Saved data: {student_record['attendance'][request.date]}")
+        print(f"\n[BACKEND] ✅ Attendance updated for {request.date}")
+        print(f"[BACKEND] 📊 New value:")
+        print(f"  {request.date}: {student_record['attendance'][request.date]}")
         
         # Recalculate statistics
+        print(f"\n[BACKEND] 📊 Recalculating class statistics...")
         class_data['statistics'] = db.calculate_class_statistics(class_data, str(class_id))
+        print(f"[BACKEND] ✅ Statistics updated: {class_data['statistics']}")
         
         # Save to database
         class_data['updated_at'] = datetime.now(timezone.utc).isoformat()
         
-        # ✅ Use the database manager's update method properly
+        print(f"\n[BACKEND] 💾 Saving to database...")
+        
         if DB_TYPE == "mongodb":
-            # MongoDB: use the update_class method
+            print(f"[BACKEND] Using MongoDB...")
             updated_class = db.update_class(user["id"], str(class_id), class_data)
         else:
-            # File-based: write directly
+            print(f"[BACKEND] Using file-based storage...")
             class_file = db.get_class_file(user["id"], str(class_id))
+            print(f"[BACKEND] File path: {class_file}")
             db.write_json(class_file, class_data)
             updated_class = class_data
         
-        print(f"[MULTI_SESSION] ✅ Successfully saved multi-session attendance")
+        print(f"[BACKEND] ✅ Saved successfully")
+        
+        print("\n" + "="*80)
+        print("[BACKEND] ✅ MULTI-SESSION UPDATE COMPLETE")
+        print("="*80 + "\n")
         
         return {
             "success": True,
@@ -1947,11 +1962,15 @@ async def update_multi_session_attendance(
         }
         
     except HTTPException:
+        print("\n" + "="*80)
+        print("[BACKEND] ❌ HTTP EXCEPTION")
+        print("="*80 + "\n")
         raise
     except Exception as e:
-        print(f"[MULTI_SESSION] ❌ Error: {str(e)}")
+        print(f"\n[BACKEND] 💥 UNEXPECTED ERROR: {str(e)}")
         import traceback
         traceback.print_exc()
+        print("="*80 + "\n")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to update multi-session attendance: {str(e)}"
