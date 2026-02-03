@@ -23,7 +23,7 @@ const initFingerprint = () => {
 // Native browser detection - no ua-parser-js needed
 const getBrowserInfo = (): { name: string; version: string } => {
   const ua = navigator.userAgent;
-  
+
   if (ua.includes('Firefox/')) {
     const version = ua.split('Firefox/')[1]?.split(' ')[0] || '';
     return { name: 'Firefox', version };
@@ -40,35 +40,35 @@ const getBrowserInfo = (): { name: string; version: string } => {
     const version = ua.split('Version/')[1]?.split(' ')[0] || '';
     return { name: 'Safari', version };
   }
-  
+
   return { name: 'Unknown Browser', version: '' };
 };
 
 const getOSInfo = (): { name: string; version: string } => {
   const ua = navigator.userAgent;
-  
+
   if (ua.includes('Windows NT 10.0')) return { name: 'Windows', version: '10/11' };
   if (ua.includes('Windows NT 6.3')) return { name: 'Windows', version: '8.1' };
   if (ua.includes('Windows NT 6.2')) return { name: 'Windows', version: '8' };
   if (ua.includes('Windows NT 6.1')) return { name: 'Windows', version: '7' };
-  
+
   if (ua.includes('Mac OS X')) {
     const version = ua.split('Mac OS X ')[1]?.split(')')[0]?.replace(/_/g, '.') || '';
     return { name: 'macOS', version };
   }
-  
+
   if (ua.includes('Android')) {
     const version = ua.split('Android ')[1]?.split(';')[0] || '';
     return { name: 'Android', version };
   }
-  
+
   if (ua.includes('iPhone') || ua.includes('iPad')) {
     const version = ua.split('OS ')[1]?.split(' ')[0]?.replace(/_/g, '.') || '';
     return { name: 'iOS', version };
   }
-  
+
   if (ua.includes('Linux')) return { name: 'Linux', version: '' };
-  
+
   return { name: 'Unknown OS', version: '' };
 };
 
@@ -82,7 +82,7 @@ const getDeviceType = (): string => {
 export const getDeviceFingerprint = async (): Promise<DeviceInfo> => {
   try {
     console.log('🔍 Starting device fingerprint collection...');
-    
+
     // Get fingerprint ID
     const fp = await initFingerprint();
     const result = await fp.get();
