@@ -199,16 +199,14 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       }
       
       console.log('✅ Found student:', student);
-      console.log('Student record ID (student.id):', student.id, typeof student.id);
+      console.log('Raw student.id:', student.id, typeof student.id);
       
-      // 2. ✅ student.id should ALREADY be the correct format "class_X_student_Y"
-      // If it's not a string, that means there's a data inconsistency
-      if (typeof student.id !== 'string') {
-        console.error('❌ Student ID is not a string! Data inconsistency detected.');
-        console.error('Student object:', student);
-        alert('Data error: Student ID format is incorrect. Please refresh the page.');
-        return;
-      }
+      // 2. ✅ CRITICAL FIX: Construct the proper student_record_id format
+      // Backend expects: "class_{class_id}_student_{student_id}"
+      const studentRecordId = `class_${activeClass.id}_student_${student.id}`;
+      
+      console.log('✅ Constructed student_record_id:', studentRecordId);
+      console.log('Type:', typeof studentRecordId);
       
       // 3. Use multiSessionCurrentData and convert to backend format
       const sessions = multiSessionCurrentData
@@ -225,9 +223,9 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         return;
       }
       
-      // 4. Create payload - student.id should already be the correct format
+      // 4. Create payload with CORRECT student_record_id format
       const payload = {
-        student_id: student.id,  // ✅ Should be "class_X_student_Y" format
+        student_id: studentRecordId,  // ✅ Now it's "class_X_student_Y" format
         date: multiSessionDate,
         sessions: sessions
       };
