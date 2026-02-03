@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState } from 'react';
@@ -22,6 +23,8 @@ interface Student {
   attendance: Record<string, AttendanceValue | 'P' | 'A' | 'L' | undefined>;
   [key: string]: any;
 }
+
+
 
 interface AttendanceSheetProps {
   activeClass: Class;
@@ -77,39 +80,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
   const [multiSessionStudentName, setMultiSessionStudentName] = useState('');
   const [multiSessionDate, setMultiSessionDate] = useState('');
   const [multiSessionCurrentData, setMultiSessionCurrentData] = useState<Array<{ id: string; name: string; status: 'P' | 'A' | 'L' | null }>>([]);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-  
-  const refreshClassData = async () => {
-    try {
-      const token = localStorage.getItem('access_token');
-      if (!token) return;
-  
-      console.log('🔄 Refreshing class data from backend...');
-      
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/classes/${activeClass.id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-  
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Fresh data received:', data.class);
-        
-        // Force a complete state update
-        onUpdateClassData({ ...data.class });
-        
-        // Trigger refresh
-        setRefreshTrigger(prev => prev + 1);
-      }
-    } catch (error) {
-      console.error('❌ Failed to refresh class data:', error);
-    }
-  };
-  
+
   const fetchClassData = async (classId: number) => {
     try {
       const token = localStorage.getItem('access_token');
@@ -189,115 +160,153 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
     setShowMultiSessionModal(true);
   };
 
-  const handleSaveMultiSession = async () => {
-    console.log('\n' + '='.repeat(80));
-    console.log('[FRONTEND] SAVE MULTI-SESSION START');
-    console.log('='.repeat(80));
-    
-    try {
-      if (!selectedStudent || !multiSessionDate || !activeClass) {
-        console.error('[FRONTEND] ❌ Missing required data');
-        alert('Please select a student and date');
-        return;
-      }
+  const handleSaveMultiSession = async (sessions: Array<{ id: string; name: string; status: 'P' | 'A' | 'L' | null }>) => {
+    if (selectedStudent === null || !multiSessionDate) return;
   
-      const student = activeClass.students.find(s => s.id === selectedStudent);
-      
-      if (!student) {
-        console.error('[FRONTEND] ❌ Student not found');
-        alert('Student not found');
-        return;
-      }
-      
-      const validSessions = multiSessionCurrentData
-        .filter(session => session.status !== null && session.status !== undefined)
-        .map(session => ({
-          id: session.id,
-          name: session.name,
-          status: session.status as 'P' | 'A' | 'L'
-        }));
-      
-      if (validSessions.length === 0) {
-        alert('Please mark attendance for at least one session');
-        return;
-      }
-      
-      const payload = {
-        student_id: String(student.id),
-        date: multiSessionDate,
-        sessions: validSessions
-      };
-      
+    try {
       const token = localStorage.getItem('access_token');
       if (!token) {
-        alert('No authentication token found. Please log in again.');
+        console.error('[MULTI_SESSION] No auth token found');
+        alert('Authentication error. Please login again.');
         return;
       }
-      
-      const url = `${process.env.NEXT_PUBLIC_API_URL}/classes/${activeClass.id}/attendance/multi-session`;
-      
-      const response = await fetch(url, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
-      });
   
-      const responseData = await response.json();
+      // ✅ Log what we're about to send
+      console.log('[MULTI_SESSION] Preparing to send:');
+      console.log('  Student ID:', selectedStudent);
+      console.log('  Date:', multiSessionDate);
+      console.log('  Sessions:', JSON.stringify(sessions, null, 2));
+  
+      // ✅ SEND ALL SESSIONS (including nulls) - backend filters them
+      const payload = {
+        student_id: selectedStudent,
+        date: multiSessionDate,
+        sessions: sessions  // ✅ Send everything!
+      };
+  
+      console.log('[MULTI_SESSION] Full payload:', JSON.stringify(payload, null, 2));
+  
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/classes/${activeClass.id}/multi-session-attendance`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        }
+      );
+  
+      console.log('[MULTI_SESSION] Response status:', response.status);
   
       if (!response.ok) {
-        let errorMessage = 'Unknown error';
-        if (responseData.detail) {
-          errorMessage = typeof responseData.detail === 'string' 
-            ? responseData.detail 
-            : JSON.stringify(responseData.detail);
-        }
-        throw new Error(errorMessage);
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        console.error('[MULTI_SESSION] Backend error:', errorData);
+        throw new Error(errorData.detail || `Backend returned ${response.status}`);
       }
   
-      // ✅ CRITICAL FIX: Update local state immediately
-      const updatedClass = { ...activeClass };
-      const studentIndex = updatedClass.students.findIndex(s => s.id === selectedStudent);
-      
-      if (studentIndex !== -1) {
-        updatedClass.students[studentIndex].attendance[multiSessionDate] = {
-          sessions: validSessions,
-          updated_at: new Date().toISOString()
+      const result = await response.json();
+      console.log('[MULTI_SESSION] ✅ Backend saved successfully:', result);
+  
+      // ✅ Update local state with backend response
+      if (result.class) {
+        // Backend returned updated class - use it directly
+        onUpdateClassData(result.class);
+        console.log('[MULTI_SESSION] Updated from backend response');
+      } else {
+        // Fallback: Calculate locally if backend doesn't return full class
+        const validSessions = sessions.filter(s => s.status !== null);
+        
+        const updatedClass: Class = {
+          ...activeClass,
+          students: activeClass.students.map(student => {
+            if (student.id === selectedStudent) {
+              return {
+                ...student,
+                attendance: {
+                  ...student.attendance,
+                  [multiSessionDate]: {
+                    sessions: validSessions.map(s => ({
+                      id: s.id,
+                      name: s.name,
+                      status: s.status as 'P' | 'A' | 'L'
+                    })),
+                    updated_at: new Date().toISOString()
+                  }
+                }
+              };
+            }
+            return student;
+          })
         };
-        onUpdateClassData(updatedClass);
-      }
-      
-      // Close modal
-      setShowMultiSessionModal(false);
-      setSelectedStudent(null);
-      setSelectedDay(null);
-      setMultiSessionCurrentData([]);
-      
-      // Show success message
-      alert('✅ Attendance saved successfully!');
   
-      // Refresh from backend after a short delay
-      setTimeout(async () => {
-        try {
-          await refreshClassData();
-          console.log('[FRONTEND] ✅ Class data refreshed from backend');
-        } catch (err) {
-          console.error('[FRONTEND] ⚠️ Failed to refresh:', err);
-        }
-      }, 200);
-      
-      console.log('='.repeat(80));
-      console.log('[FRONTEND] SAVE MULTI-SESSION END');
-      console.log('='.repeat(80) + '\n');
-      
+        // Recalculate statistics locally
+        const calculateLocalStats = () => {
+          let totalPresent = 0;
+          let totalAbsent = 0;
+          let totalLate = 0;
+          let total = 0;
+  
+          updatedClass.students.forEach(student => {
+            Object.values(student.attendance).forEach(dayData => {
+              if (dayData) {
+                if (typeof dayData === 'object' && 'sessions' in dayData) {
+                  dayData.sessions.forEach((session: any) => {
+                    total++;
+                    if (session.status === 'P') totalPresent++;
+                    else if (session.status === 'A') totalAbsent++;
+                    else if (session.status === 'L') totalLate++;
+                  });
+                } else if (typeof dayData === 'object' && 'status' in dayData) {
+                  const count = dayData.count || 1;
+                  total += count;
+                  if (dayData.status === 'P') totalPresent += count;
+                  else if (dayData.status === 'A') totalAbsent += count;
+                  else if (dayData.status === 'L') totalLate += count;
+                } else if (typeof dayData === 'string') {
+                  total++;
+                  if (dayData === 'P') totalPresent++;
+                  else if (dayData === 'A') totalAbsent++;
+                  else if (dayData === 'L') totalLate++;
+                }
+              }
+            });
+          });
+  
+          const avgAttendance = total > 0 ? ((totalPresent + totalLate) / total * 100) : 0;
+  
+          return {
+            totalStudents: updatedClass.students.length,
+            avgAttendance: parseFloat(avgAttendance.toFixed(3)),
+            atRiskCount: 0,
+            excellentCount: 0
+          };
+        };
+  
+        updatedClass.statistics = calculateLocalStats();
+        onUpdateClassData(updatedClass);
+        console.log('[MULTI_SESSION] Updated from local calculation');
+      }
+  
+      // ✅ Close modal AFTER successful save
+      setShowMultiSessionModal(false);
+      setSelectedDay(null);
+      setSelectedStudent(null);
+  
+      console.log('[MULTI_SESSION] ✅ Save complete');
+  
     } catch (error) {
-      console.error('[FRONTEND] 💥 EXCEPTION:', error);
-      alert(`❌ Failed to save attendance: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('[MULTI_SESSION] ❌ Save failed:', error);
+      
+      // ✅ Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Failed to save attendance: ${errorMessage}\n\nPlease try again.`);
+      
+      // ✅ Don't close modal on error - let user retry
     }
   };
-  
+    
   const handleCloseMultiSession = () => {
     setShowMultiSessionModal(false);
     setSelectedDay(null);
@@ -321,47 +330,60 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
     year: 'numeric'
   });
 
-  const calculateAttendance = React.useMemo(() => {
-    return (student: Student, daysInMonth: number, currentMonth: number, currentYear: number): string => {
-      let present = 0;
-      let absent = 0;
-      let late = 0;
-      let total = 0;
-  
-      for (let day = 1; day <= daysInMonth; day++) {
-        const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const attendanceValue = student.attendance[dateKey];
-  
-        if (attendanceValue) {
-          if (typeof attendanceValue === 'object' && 'sessions' in attendanceValue && attendanceValue.sessions) {
-            attendanceValue.sessions.forEach((session) => {
-              if (session.status) {
-                total++;
-                if (session.status === 'P') present++;
-                else if (session.status === 'A') absent++;
-                else if (session.status === 'L') late++;
-              }
-            });
-          } else if (typeof attendanceValue === 'object' && 'status' in attendanceValue && attendanceValue.status) {
-            const count = attendanceValue.count || 1;
-            total += count;
-            if (attendanceValue.status === 'P') present += count;
-            else if (attendanceValue.status === 'A') absent += count;
-            else if (attendanceValue.status === 'L') late += count;
-          } else if (typeof attendanceValue === 'string') {
-            total++;
-            if (attendanceValue === 'P') present++;
-            else if (attendanceValue === 'A') absent++;
-            else if (attendanceValue === 'L') late++;
-          }
+  const calculateAttendance = (
+    student: Student,
+    daysInMonth: number,
+    currentMonth: number,
+    currentYear: number
+  ): string => {
+    let present = 0;
+    let absent = 0;
+    let late = 0;
+    let total = 0;
+
+    console.log(`[CALCULATE] Processing student: ${student.name}`);
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const attendanceValue = student.attendance[dateKey];
+
+      if (attendanceValue) {
+        // ✅ NEW FORMAT: { sessions: [...], updated_at: "..." }
+        if (typeof attendanceValue === 'object' && 'sessions' in attendanceValue && attendanceValue.sessions) {
+          attendanceValue.sessions.forEach((session) => {
+            if (session.status) {
+              total++;
+              if (session.status === 'P') present++;
+              else if (session.status === 'A') absent++;
+              else if (session.status === 'L') late++;
+            }
+          });
+        }
+        // OLD FORMAT: { status: 'P', count: 2 }
+        else if (typeof attendanceValue === 'object' && 'status' in attendanceValue && attendanceValue.status) {
+          const count = attendanceValue.count || 1;
+          total += count;
+          if (attendanceValue.status === 'P') present += count;
+          else if (attendanceValue.status === 'A') absent += count;
+          else if (attendanceValue.status === 'L') late += count;
+        }
+        // VERY OLD FORMAT: 'P' | 'A' | 'L'
+        else if (typeof attendanceValue === 'string') {
+          total++;
+          if (attendanceValue === 'P') present++;
+          else if (attendanceValue === 'A') absent++;
+          else if (attendanceValue === 'L') late++;
         }
       }
-  
-      const percentage = total > 0 ? ((present + late) / total) * 100 : 0;
-      return percentage.toFixed(3);
-    };
-  }, []);
-    
+    }
+
+    const percentage = total > 0 ? ((present + late) / total) * 100 : 0;
+
+    console.log(`[CALCULATE] ${student.name}: ${present}P + ${late}L / ${total} = ${percentage.toFixed(3)}%`);
+
+    return percentage.toFixed(3);
+  };
+
   const getRiskLevel = (percentage: string) => {
     const pct = parseFloat(percentage);
     if (pct >= thresholds.excellent) {
