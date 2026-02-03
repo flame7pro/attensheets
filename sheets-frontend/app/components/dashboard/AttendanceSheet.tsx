@@ -199,9 +199,18 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       }
       
       console.log('✅ Found student:', student);
-      console.log('Student ID (should be string):', student.id, typeof student.id);
+      console.log('Student record ID (student.id):', student.id, typeof student.id);
       
-      // 2. Use multiSessionCurrentData and convert to backend format
+      // 2. ✅ student.id should ALREADY be the correct format "class_X_student_Y"
+      // If it's not a string, that means there's a data inconsistency
+      if (typeof student.id !== 'string') {
+        console.error('❌ Student ID is not a string! Data inconsistency detected.');
+        console.error('Student object:', student);
+        alert('Data error: Student ID format is incorrect. Please refresh the page.');
+        return;
+      }
+      
+      // 3. Use multiSessionCurrentData and convert to backend format
       const sessions = multiSessionCurrentData
         .filter(session => session.status !== null)
         .map((session, index) => ({
@@ -216,9 +225,9 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         return;
       }
       
-      // 3. Create payload
+      // 4. Create payload - student.id should already be the correct format
       const payload = {
-        student_id: student.id,
+        student_id: student.id,  // ✅ Should be "class_X_student_Y" format
         date: multiSessionDate,
         sessions: sessions
       };
@@ -226,7 +235,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       console.log('📤 Sending payload:', JSON.stringify(payload, null, 2));
       console.log('Type of student_id:', typeof payload.student_id);
       
-      // 4. Send request
+      // 5. Send request
       const token = localStorage.getItem('access_token');
       
       if (!token) {
@@ -260,7 +269,6 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
           if (typeof responseData.detail === 'string') {
             errorMessage = responseData.detail;
           } else if (Array.isArray(responseData.detail)) {
-            // ✅ FIX: Add proper type annotation for err
             errorMessage = responseData.detail.map((err: any) => 
               `Field: ${err.loc?.join('.')} - ${err.msg}${err.input ? ` (got: ${JSON.stringify(err.input)})` : ''}`
             ).join('\n');
