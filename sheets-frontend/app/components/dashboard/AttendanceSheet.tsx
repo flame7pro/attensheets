@@ -189,8 +189,13 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
     console.log('=== SAVE MULTI-SESSION DEBUG START ===');
     
     try {
-      // 1. Find the actual student object
-      const student = activeClass?.students?.find(s => s.id === selectedStudent);
+      if (!selectedStudent || !multiSessionDate || !activeClass) {
+        alert('Please select a student and date');
+        return;
+      }
+  
+      // 1. Find the student object
+      const student = activeClass.students.find(s => s.id === selectedStudent);
       
       if (!student) {
         console.error('❌ Student not found. selectedStudent:', selectedStudent);
@@ -199,18 +204,37 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       }
       
       console.log('✅ Found student:', student);
-      console.log('Student record ID (student.id):', student.id, typeof student.id);
+      console.log('   Class enrollment mode:', activeClass.enrollment_mode);
+      console.log('   Student ID:', student.id, typeof student.id);
       
-      // 2. ✅ student.id should ALREADY be the correct format "class_X_student_Y"
-      // If it's not a string, that means there's a data inconsistency
-      if (typeof student.id !== 'string') {
-        console.error('❌ Student ID is not a string! Data inconsistency detected.');
-        console.error('Student object:', student);
-        alert('Data error: Student ID format is incorrect. Please refresh the page.');
-        return;
+      // 2. ✅ DETERMINE THE CORRECT student_id BASED ON CLASS MODE
+      let studentIdToSend: string;
+      
+      if (activeClass.enrollment_mode === 'enrollment_via_id') {
+        // ✅ ENROLLMENT VIA ID MODE
+        // For QR-enrolled students, the backend expects student_record_id format
+        // The student.id in the class should ALREADY be in "classId_student_X" format
+        
+        if (typeof student.id === 'string' && student.id.includes('_student_')) {
+          // Already in correct format
+          studentIdToSend = student.id;
+          console.log('✅ Using existing student_record_id:', studentIdToSend);
+        } else {
+          // Fallback: construct the student_record_id
+          const studentIndex = activeClass.students.findIndex(s => s.id === selectedStudent);
+          studentIdToSend = `${activeClass.id}_student_${studentIndex + 1}`;
+          console.log('⚠️  Constructed student_record_id:', studentIdToSend);
+        }
+      } else {
+        // ✅ MANUAL ENTRY / IMPORT MODES
+        // For manually added students, just use the ID as-is (convert to string)
+        studentIdToSend = String(student.id);
+        console.log('✅ Using student ID as string:', studentIdToSend);
       }
       
-      // 3. Use multiSessionCurrentData and convert to backend format
+      console.log('📝 Final student_id to send:', studentIdToSend, typeof studentIdToSend);
+      
+      // 3. Prepare sessions data
       const sessions = multiSessionCurrentData
         .filter(session => session.status !== null)
         .map((session, index) => ({
@@ -225,26 +249,24 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         return;
       }
       
-      // 4. Create payload - student.id should already be the correct format
+      // 4. Create payload
       const payload = {
-        student_id: student.id,  // ✅ Should be "class_X_student_Y" format
+        student_id: studentIdToSend,
         date: multiSessionDate,
         sessions: sessions
       };
       
-      console.log('📤 Sending payload:', JSON.stringify(payload, null, 2));
-      console.log('Type of student_id:', typeof payload.student_id);
+      console.log('📤 Request payload:', JSON.stringify(payload, null, 2));
       
       // 5. Send request
       const token = localStorage.getItem('access_token');
-      
       if (!token) {
         alert('No authentication token found. Please log in again.');
         return;
       }
       
       const url = `${process.env.NEXT_PUBLIC_API_URL}/classes/${activeClass.id}/attendance/multi-session`;
-      console.log('Request URL:', url);
+      console.log('🌐 Request URL:', url);
       
       const response = await fetch(url, {
         method: 'POST',
@@ -255,52 +277,58 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         body: JSON.stringify(payload),
       });
   
-      console.log('Response Status:', response.status);
-      
+      console.log('📡 Response status:', response.status);
       const responseData = await response.json();
-      console.log('📥 Response Data:', responseData);
+      console.log('📥 Response data:', responseData);
   
       if (!response.ok) {
-        console.error('❌ Request failed');
-        
-        // Parse the actual error with proper TypeScript types
         let errorMessage = 'Unknown error';
         if (responseData.detail) {
           if (typeof responseData.detail === 'string') {
             errorMessage = responseData.detail;
           } else if (Array.isArray(responseData.detail)) {
             errorMessage = responseData.detail.map((err: any) => 
-              `Field: ${err.loc?.join('.')} - ${err.msg}${err.input ? ` (got: ${JSON.stringify(err.input)})` : ''}`
+              `${err.loc?.join('.')}: ${err.msg}${err.input ? ` (got: ${JSON.stringify(err.input)})` : ''}`
             ).join('\n');
           } else {
             errorMessage = JSON.stringify(responseData.detail, null, 2);
           }
         }
         
-        console.error('Error details:', errorMessage);
-        alert('Failed to save attendance:\n\n' + errorMessage);
+        console.error('❌ Request failed:', errorMessage);
+        
+        if (response.status === 404) {
+          alert(
+            `Student not found.\n\n` +
+            `Debug info:\n` +
+            `Mode: ${activeClass.enrollment_mode}\n` +
+            `Sent ID: ${studentIdToSend}\n` +
+            `Student: ${student.name}\n\n` +
+            `Please refresh the page and try again.`
+          );
+        } else {
+          alert('Failed to save attendance:\n\n' + errorMessage);
+        }
+        
         throw new Error(errorMessage);
       }
   
-      console.log('✅ SUCCESS!');
+      console.log('✅ SUCCESS! Attendance saved');
       
-      // Close modal
+      // Close modal and refresh
       setShowMultiSessionModal(false);
       setSelectedStudent(null);
       setSelectedDay(null);
       setMultiSessionCurrentData([]);
       
-      // Refresh class data from backend
       await refreshClassData();
-      
       alert('Attendance saved successfully!');
       
     } catch (error) {
-      console.error('💥 Exception:', error);
-      alert('Error: ' + (error as Error).message);
+      console.error('💥 Error:', error);
     }
     
-    console.log('=== SAVE MULTI-SESSION DEBUG END ===');
+    console.log('=== SAVE MULTI-SESSION DEBUG END ===\n');
   };
   
   const handleCloseMultiSession = () => {
