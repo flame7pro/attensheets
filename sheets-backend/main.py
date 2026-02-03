@@ -1819,100 +1819,56 @@ async def update_multi_session_attendance(
     print("\n" + "="*80)
     print("[BACKEND] MULTI-SESSION REQUEST RECEIVED")
     print("="*80)
-    print(f"[BACKEND] Class ID: {class_id} (type: {type(class_id)})")
-    print(f"[BACKEND] Student ID: {request.student_id} (type: {type(request.student_id)})")
-    print(f"[BACKEND] Date: {request.date}")
-    print(f"[BACKEND] Sessions: {len(request.sessions)}")
-    for i, s in enumerate(request.sessions, 1):
-        print(f"  Session {i}: {s.name} = {s.status}")
-    print("="*80)
     
     try:
-        # Get user
         user = db.get_user_by_email(email)
         if not user:
-            print("[BACKEND] ❌ User not found")
             raise HTTPException(status_code=404, detail="User not found")
         
-        print(f"[BACKEND] ✅ User: {user['name']} ({user['id']})")
+        # Get class data
+        class_data = db.get_class(user["id"], str(class_id))
+        if not class_data:
+            raise HTTPException(status_code=404, detail="Class not found")
         
-        # Filter sessions with valid status
+        print(f"[BACKEND] Class: {class_data.get('name')}")
+        print(f"[BACKEND] Enrollment mode: {class_data.get('enrollment_mode')}")
+        
+        # Filter valid sessions
         valid_sessions = [
             s for s in request.sessions 
             if s.status is not None and s.status in ['P', 'A', 'L']
         ]
         
-        print(f"[BACKEND] 📝 Valid sessions after filtering: {len(valid_sessions)}")
-        
         if not valid_sessions:
-            print("[BACKEND] ❌ No valid sessions")
-            raise HTTPException(
-                status_code=400,
-                detail="No valid sessions provided. At least one session must have P, A, or L status."
-            )
+            raise HTTPException(status_code=400, detail="No valid sessions provided")
         
-        # Get class data
-        class_data = db.get_class(user["id"], str(class_id))
-        if not class_data:
-            print(f"[BACKEND] ❌ Class not found: {class_id}")
-            raise HTTPException(status_code=404, detail="Class not found")
-        
-        print(f"[BACKEND] ✅ Class found: {class_data.get('name')}")
-        print(f"[BACKEND] 📊 Enrollment mode: {class_data.get('enrollment_mode')}")
-        print(f"[BACKEND] 👥 Total students: {len(class_data.get('students', []))}")
-        
-        # Find student
+        # Find student - WORKS FOR ALL MODES
         student_found = False
         student_record = None
-        enrollment_mode = class_data.get('enrollment_mode', 'manual_entry')
         
-        print(f"\n[BACKEND] 🔍 Searching for student: {request.student_id}")
-        print(f"[BACKEND] 📋 Students in class:")
-        
-        for idx, student in enumerate(class_data.get('students', []), 1):
-            student_id = student.get('id')
-            print(f"  {idx}. {student.get('name'):20s} | ID: {student_id} (type: {type(student_id).__name__})")
+        for student in class_data.get('students', []):
+            student_id_str = str(student.get('id'))
+            request_id_str = str(request.student_id)
             
-            # Try matching with multiple strategies
-            match_direct = (str(student_id) == str(request.student_id))
-            match_record = (student.get('student_record_id') == request.student_id)
-            
-            if match_direct or match_record:
+            # ✅ UNIVERSAL MATCH - Works for all enrollment modes
+            if student_id_str == request_id_str:
                 student_found = True
                 student_record = student
-                match_type = 'direct ID' if match_direct else 'student_record_id'
-                print(f"\n[BACKEND] ✅ MATCH FOUND!")
-                print(f"  Student: {student.get('name')}")
-                print(f"  Match type: {match_type}")
-                print(f"  Student ID in class: {student_id}")
-                print(f"  Received student_id: {request.student_id}")
+                print(f"[BACKEND] ✅ MATCH: {student.get('name')} (ID: {student_id_str})")
                 break
         
-        if not student_found or not student_record:
-            print(f"\n[BACKEND] ❌ STUDENT NOT FOUND")
-            print(f"  Looking for: {request.student_id} (type: {type(request.student_id)})")
-            print(f"  Enrollment mode: {enrollment_mode}")
-            print(f"  Total students searched: {len(class_data.get('students', []))}")
-            
-            raise HTTPException(
-                status_code=404,
-                detail=f"Student with ID {request.student_id} not found in class {class_id}"
-            )
+        if not student_found:
+            print(f"[BACKEND] ❌ Student not found: {request.student_id}")
+            print(f"[BACKEND] Available IDs:")
+            for s in class_data.get('students', []):
+                print(f"  - {s.get('name')}: {s.get('id')}")
+            raise HTTPException(status_code=404, detail="Student not found")
         
-        # Initialize attendance if needed
+        # Initialize attendance
         if 'attendance' not in student_record:
             student_record['attendance'] = {}
-            print(f"[BACKEND] 📝 Initialized attendance dict for {student_record.get('name')}")
         
-        # Check what was there before
-        old_value = student_record['attendance'].get(request.date)
-        print(f"\n[BACKEND] 📋 Attendance before update:")
-        if old_value:
-            print(f"  {request.date}: {old_value}")
-        else:
-            print(f"  {request.date}: (not set)")
-        
-        # Save attendance in NEW FORMAT
+        # ✅ SAVE IN NEW FORMAT
         student_record['attendance'][request.date] = {
             'sessions': [
                 {
@@ -1925,56 +1881,55 @@ async def update_multi_session_attendance(
             'updated_at': datetime.now(timezone.utc).isoformat()
         }
         
-        print(f"\n[BACKEND] ✅ Attendance updated for {request.date}")
-        print(f"[BACKEND] 📊 New value:")
-        print(f"  {request.date}: {student_record['attendance'][request.date]}")
+        print(f"[BACKEND] ✅ Saved attendance for {request.date}:")
+        print(f"  {student_record['attendance'][request.date]}")
         
         # Recalculate statistics
-        print(f"\n[BACKEND] 📊 Recalculating class statistics...")
         class_data['statistics'] = db.calculate_class_statistics(class_data, str(class_id))
-        print(f"[BACKEND] ✅ Statistics updated: {class_data['statistics']}")
-        
-        # Save to database
         class_data['updated_at'] = datetime.now(timezone.utc).isoformat()
         
-        print(f"\n[BACKEND] 💾 Saving to database...")
-        
+        # ✅ SAVE TO DATABASE
         if DB_TYPE == "mongodb":
-            print(f"[BACKEND] Using MongoDB...")
             updated_class = db.update_class(user["id"], str(class_id), class_data)
         else:
-            print(f"[BACKEND] Using file-based storage...")
             class_file = db.get_class_file(user["id"], str(class_id))
-            print(f"[BACKEND] File path: {class_file}")
             db.write_json(class_file, class_data)
             updated_class = class_data
         
-        print(f"[BACKEND] ✅ Saved successfully")
+        print(f"[BACKEND] ✅ Database updated successfully")
         
-        print("\n" + "="*80)
+        # ✅ VERIFY THE SAVE
+        verification = db.get_class(user["id"], str(class_id))
+        verify_student = next((s for s in verification['students'] if str(s['id']) == request_id_str), None)
+        if verify_student:
+            print(f"[BACKEND] ✅ VERIFICATION: Data persisted correctly")
+            print(f"  {verify_student['attendance'].get(request.date)}")
+        else:
+            print(f"[BACKEND] ⚠️ WARNING: Could not verify save")
+        
+        print("="*80)
         print("[BACKEND] ✅ MULTI-SESSION UPDATE COMPLETE")
         print("="*80 + "\n")
         
         return {
             "success": True,
             "message": "Multi-session attendance updated successfully",
-            "class": updated_class
+            "class": updated_class,
+            "debug": {
+                "student_name": student_record.get('name'),
+                "sessions_saved": len(valid_sessions),
+                "date": request.date
+            }
         }
         
     except HTTPException:
-        print("\n" + "="*80)
-        print("[BACKEND] ❌ HTTP EXCEPTION")
-        print("="*80 + "\n")
         raise
     except Exception as e:
-        print(f"\n[BACKEND] 💥 UNEXPECTED ERROR: {str(e)}")
+        print(f"\n[BACKEND] 💥 ERROR: {str(e)}")
         import traceback
         traceback.print_exc()
-        print("="*80 + "\n")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to update multi-session attendance: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to update: {str(e)}"
+    )
         
 @app.delete("/classes/{class_id}")
 async def delete_class(class_id: str, email: str = Depends(verify_token)):
