@@ -204,35 +204,15 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       console.log('✅ Found student:', student);
       console.log('   Class enrollment mode:', activeClass.enrollment_mode);
       console.log('   Student ID:', student.id, typeof student.id);
+      console.log('   Student object keys:', Object.keys(student));
       
-      // 2. ✅ DETERMINE THE CORRECT student_id BASED ON CLASS MODE
-      let studentIdToSend: string;
+      // 2. ✅ USE THE STUDENT'S ID DIRECTLY - DON'T CONSTRUCT IT
+      // The student.id in the class data should ALREADY be the correct format
+      // Whether it's a number (manual/import) or string (enrollment_via_id)
       
-      if (activeClass.enrollment_mode === 'enrollment_via_id') {
-        // ✅ ENROLLMENT VIA ID MODE
-        // For QR-enrolled students, the backend expects student_record_id format
-        
-        // Convert to string first, then check format
-        const studentIdStr = String(student.id);
-        
-        if (studentIdStr.includes('_student_')) {
-          // Already in correct format
-          studentIdToSend = studentIdStr;
-          console.log('✅ Using existing student_record_id:', studentIdToSend);
-        } else {
-          // Fallback: construct the student_record_id
-          const studentIndex = activeClass.students.findIndex(s => s.id === selectedStudent);
-          studentIdToSend = `${activeClass.id}_student_${studentIndex + 1}`;
-          console.log('⚠️  Constructed student_record_id:', studentIdToSend);
-        }
-      } else {
-        // ✅ MANUAL ENTRY / IMPORT MODES
-        // For manually added students, just use the ID as-is (convert to string)
-        studentIdToSend = String(student.id);
-        console.log('✅ Using student ID as string:', studentIdToSend);
-      }
+      const studentIdToSend = String(student.id);
       
-      console.log('📝 Final student_id to send:', studentIdToSend, typeof studentIdToSend);
+      console.log('📝 Using student.id directly:', studentIdToSend);
       
       // 3. Prepare sessions data
       const sessions = multiSessionCurrentData
@@ -298,13 +278,21 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         console.error('❌ Request failed:', errorMessage);
         
         if (response.status === 404) {
+          // Log detailed debug info
+          console.error('🔍 DEBUG - Student not found:');
+          console.error('   Sent student_id:', studentIdToSend);
+          console.error('   Student name:', student.name);
+          console.error('   All student IDs in class:', activeClass.students.map(s => s.id));
+          
           alert(
-            `Student not found.\n\n` +
-            `Debug info:\n` +
-            `Mode: ${activeClass.enrollment_mode}\n` +
+            `Student not found in backend.\n\n` +
+            `This is a data sync issue. The student ID in your frontend doesn't match the backend.\n\n` +
             `Sent ID: ${studentIdToSend}\n` +
             `Student: ${student.name}\n\n` +
-            `Please refresh the page and try again.`
+            `Please:\n` +
+            `1. Refresh the page (Ctrl+R or Cmd+R)\n` +
+            `2. If that doesn't work, try logging out and back in\n` +
+            `3. If issue persists, contact support`
           );
         } else {
           alert('Failed to save attendance:\n\n' + errorMessage);
