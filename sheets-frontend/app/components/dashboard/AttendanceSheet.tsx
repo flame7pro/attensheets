@@ -196,15 +196,25 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         return;
       }
   
+      // ✅ FIX: Get the actual student object
+      const student = activeClass.students.find(s => s.id === selectedStudent);
+      if (!student) {
+        console.error('[MULTI_SESSION] Student not found');
+        return;
+      }
+  
       console.log('[MULTI_SESSION] Preparing to send:');
-      console.log('  Student ID:', selectedStudent);
+      console.log('  Student numeric ID:', selectedStudent);
+      console.log('  Student record ID (string):', student.id); // ✅ This is the student_record_id
       console.log('  Date:', multiSessionDate);
       console.log('  Sessions:', JSON.stringify(sessions, null, 2));
   
+      // ✅ CRITICAL FIX: Use student.id (which is the student_record_id STRING)
+      // NOT selectedStudent (which is the numeric index)
       const payload = {
-        student_id: selectedStudent,
+        student_id: student.id,  // ✅ CHANGED: Use student.id (string) not selectedStudent (number)
         date: multiSessionDate,
-        sessions: sessions  // Send all sessions (backend filters nulls)
+        sessions: sessions
       };
   
       console.log('[MULTI_SESSION] Full payload:', JSON.stringify(payload, null, 2));
@@ -232,7 +242,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       const result = await response.json();
       console.log('[MULTI_SESSION] ✅ Backend saved successfully:', result);
   
-      // ✅ CRITICAL FIX: Always refresh from backend after save
+      // ✅ Refresh from backend after save
       console.log('[MULTI_SESSION] Refreshing class data...');
       await refreshClassData();
   
@@ -250,7 +260,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       alert(`Failed to save attendance: ${errorMessage}\n\nPlease try again.`);
     }
   };
-    
+
   const handleCloseMultiSession = () => {
     setShowMultiSessionModal(false);
     setSelectedDay(null);
