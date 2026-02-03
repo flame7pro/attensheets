@@ -23,8 +23,6 @@ interface Student {
   [key: string]: any;
 }
 
-
-
 interface AttendanceSheetProps {
   activeClass: Class;
   currentMonth: number;
@@ -213,11 +211,13 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       if (activeClass.enrollment_mode === 'enrollment_via_id') {
         // ✅ ENROLLMENT VIA ID MODE
         // For QR-enrolled students, the backend expects student_record_id format
-        // The student.id in the class should ALREADY be in "classId_student_X" format
         
-        if (typeof student.id === 'string' && student.id.includes('_student_')) {
+        // Convert to string first, then check format
+        const studentIdStr = String(student.id);
+        
+        if (studentIdStr.includes('_student_')) {
           // Already in correct format
-          studentIdToSend = student.id;
+          studentIdToSend = studentIdStr;
           console.log('✅ Using existing student_record_id:', studentIdToSend);
         } else {
           // Fallback: construct the student_record_id
