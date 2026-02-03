@@ -1810,11 +1810,11 @@ async def update_class(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to update class: {str(e)}")
 
-@app.put("/classes/{class_id}/multi-session-attendance")
+@app.put("/classes/{class_id}/attendance/multi-session")
 async def update_multi_session_attendance(
-    class_id: str,  # ✅ Changed to str
+    class_id: str,
     request: MultiSessionAttendanceUpdate,
-    email: str = Depends(verify_token)  # ✅ Get email from token
+    email: str = Depends(verify_token)
 ):
     try:
         print("\n" + "="*80)
@@ -1825,12 +1825,12 @@ async def update_multi_session_attendance(
         print(f"  Raw sessions: {request.sessions}")
         print("="*80 + "\n")
         
-        # ✅ Get user from email
+        # Get user
         user = db.get_user_by_email(email)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
-        # ✅ Filter out sessions with null status
+        # Filter out sessions with null status
         valid_sessions = [
             s for s in request.sessions 
             if s.status is not None and s.status in ['P', 'A', 'L']
@@ -1844,23 +1844,45 @@ async def update_multi_session_attendance(
                 detail="No valid sessions provided. At least one session must have P, A, or L status."
             )
         
-        # ✅ Get existing class data using MongoDB manager
+        # Get existing class data
         class_data = db.get_class(user["id"], str(class_id))
         if not class_data:
             raise HTTPException(status_code=404, detail="Class not found")
         
-        # Find student
+        print(f"[MULTI_SESSION] Class found: {class_data.get('name')}")
+        print(f"[MULTI_SESSION] Enrollment mode: {class_data.get('enrollment_mode')}")
+        print(f"[MULTI_SESSION] Total students in class: {len(class_data.get('students', []))}")
+        
+        # ✅ ENHANCED STUDENT MATCHING - handles both formats
         student_found = False
+        student_record = None
+        
         for student in class_data['students']:
-            if student['id'] == request.student_id:
+            # Log each student for debugging
+            student_id = student.get('id')
+            print(f"[MULTI_SESSION] Checking student: {student.get('name')} (ID: {student_id})")
+            
+            # Try multiple matching strategies:
+            # 1. Direct ID match (works for all modes)
+            # 2. student_record_id match (for enrollment_via_id mode)
+            
+            if (student_id == request.student_id or 
+                student.get('student_record_id') == request.student_id):
+                
                 student_found = True
+                student_record = student
+                
+                print(f"[MULTI_SESSION] ✅ MATCH FOUND!")
+                print(f"  Matched student: {student.get('name')}")
+                print(f"  Student ID: {student_id}")
+                print(f"  Matching method: {'Direct ID' if student_id == request.student_id else 'student_record_id'}")
                 
                 # Initialize attendance dict if needed
-                if 'attendance' not in student:
-                    student['attendance'] = {}
+                if 'attendance' not in student_record:
+                    student_record['attendance'] = {}
                 
-                # ✅ Save sessions in NEW FORMAT
-                student['attendance'][request.date] = {
+                # Save sessions in NEW FORMAT
+                student_record['attendance'][request.date] = {
                     'sessions': [
                         {
                             'id': s.id,
@@ -1872,67 +1894,28 @@ async def update_multi_session_attendance(
                     'updated_at': datetime.now(timezone.utc).isoformat()
                 }
                 
-                print(f"[MULTI_SESSION] Updated attendance for student {request.student_id} on {request.date}")
-                print(f"[MULTI_SESSION] Saved data: {student['attendance'][request.date]}")
+                print(f"[MULTI_SESSION] Updated attendance for {request.date}")
+                print(f"[MULTI_SESSION] Saved data: {student_record['attendance'][request.date]}")
                 break
         
         if not student_found:
+            print(f"[MULTI_SESSION] ❌ STUDENT NOT FOUND")
+            print(f"  Looking for: {request.student_id}")
+            print(f"  Available student IDs:")
+            for s in class_data['students']:
+                print(f"    - {s.get('id')} ({s.get('name')})")
+                if s.get('student_record_id'):
+                    print(f"      student_record_id: {s.get('student_record_id')}")
+            
             raise HTTPException(
                 status_code=404,
                 detail=f"Student with ID {request.student_id} not found in class {class_id}"
             )
         
         # Recalculate statistics
-        total_present = 0
-        total_absent = 0
-        total_late = 0
-        total_sessions = 0
+        class_data['statistics'] = db.calculate_class_statistics(class_data, str(class_id))
         
-        for student in class_data['students']:
-            if 'attendance' in student:
-                for date_key, attendance_data in student['attendance'].items():
-                    if isinstance(attendance_data, dict) and 'sessions' in attendance_data:
-                        # NEW FORMAT
-                        for session in attendance_data['sessions']:
-                            total_sessions += 1
-                            if session['status'] == 'P':
-                                total_present += 1
-                            elif session['status'] == 'A':
-                                total_absent += 1
-                            elif session['status'] == 'L':
-                                total_late += 1
-                    elif isinstance(attendance_data, dict) and 'status' in attendance_data:
-                        # OLD FORMAT
-                        count = attendance_data.get('count', 1)
-                        total_sessions += count
-                        if attendance_data['status'] == 'P':
-                            total_present += count
-                        elif attendance_data['status'] == 'A':
-                            total_absent += count
-                        elif attendance_data['status'] == 'L':
-                            total_late += count
-                    elif isinstance(attendance_data, str):
-                        # VERY OLD FORMAT
-                        total_sessions += 1
-                        if attendance_data == 'P':
-                            total_present += 1
-                        elif attendance_data == 'A':
-                            total_absent += 1
-                        elif attendance_data == 'L':
-                            total_late += 1
-        
-        avg_attendance = 0
-        if total_sessions > 0:
-            avg_attendance = ((total_present + total_late) / total_sessions) * 100
-        
-        class_data['statistics'] = {
-            'totalStudents': len(class_data['students']),
-            'avgAttendance': round(avg_attendance, 3),
-            'atRiskCount': 0,
-            'excellentCount': 0
-        }
-        
-        # ✅ Save to database using MongoDB manager
+        # Save to database
         class_data['updated_at'] = datetime.now(timezone.utc).isoformat()
         class_file = db.get_class_file(user["id"], str(class_id))
         db.write_json(class_file, class_data)
