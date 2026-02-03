@@ -201,8 +201,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       console.log('✅ Found student:', student);
       console.log('Student ID (should be string):', student.id, typeof student.id);
       
-      // 2. ✅ FIX: Use multiSessionCurrentData (not multiSessionAttendance)
-      // Filter out sessions with null status and convert to the format backend expects
+      // 2. Use multiSessionCurrentData and convert to backend format
       const sessions = multiSessionCurrentData
         .filter(session => session.status !== null)
         .map((session, index) => ({
@@ -219,7 +218,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       
       // 3. Create payload
       const payload = {
-        student_id: student.id,  // ✅ This is the string ID like "class_1_student_1"
+        student_id: student.id,
         date: multiSessionDate,
         sessions: sessions
       };
@@ -255,13 +254,14 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       if (!response.ok) {
         console.error('❌ Request failed');
         
-        // Parse the actual error
+        // Parse the actual error with proper TypeScript types
         let errorMessage = 'Unknown error';
         if (responseData.detail) {
           if (typeof responseData.detail === 'string') {
             errorMessage = responseData.detail;
           } else if (Array.isArray(responseData.detail)) {
-            errorMessage = responseData.detail.map(err => 
+            // ✅ FIX: Add proper type annotation for err
+            errorMessage = responseData.detail.map((err: any) => 
               `Field: ${err.loc?.join('.')} - ${err.msg}${err.input ? ` (got: ${JSON.stringify(err.input)})` : ''}`
             ).join('\n');
           } else {
@@ -289,11 +289,12 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       
     } catch (error) {
       console.error('💥 Exception:', error);
-      alert('Error: ' + error.message);
+      alert('Error: ' + (error as Error).message);
     }
     
     console.log('=== SAVE MULTI-SESSION DEBUG END ===');
   };
+  
   const handleCloseMultiSession = () => {
     setShowMultiSessionModal(false);
     setSelectedDay(null);
