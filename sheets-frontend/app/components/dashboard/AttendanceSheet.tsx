@@ -206,34 +206,44 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       console.log('   Student ID:', student.id, typeof student.id);
       console.log('   Student object keys:', Object.keys(student));
       
-      // 2. ✅ USE THE STUDENT'S ID DIRECTLY - DON'T CONSTRUCT IT
-      // The student.id in the class data should ALREADY be the correct format
-      // Whether it's a number (manual/import) or string (enrollment_via_id)
+      // 2. ✅ FIXED: Determine the correct student ID to send based on enrollment mode
+      let studentIdToSend: string;
       
-      const studentIdToSend = String(student.id);
+      if (activeClass.enrollment_mode === 'enrollment_via_id' || activeClass.enrollment_mode === 'link_based_enrollment') {
+        // For enrollment_via_id mode:
+        // - student.id should already be in format "classId_student_X"
+        // - Just use it directly as a string
+        studentIdToSend = String(student.id);
+        console.log('📝 Enrollment via ID mode - using student.id directly:', studentIdToSend);
+      } else {
+        // For manual_entry or import modes:
+        // - student.id is a number (timestamp)
+        // - Convert to string
+        studentIdToSend = String(student.id);
+        console.log('📝 Manual/Import mode - using numeric ID as string:', studentIdToSend);
+      }
       
-      console.log('📝 Using student.id directly:', studentIdToSend);
-      
-      // 3. Prepare sessions data
-      const sessions = multiSessionCurrentData
-        .filter(session => session.status !== null)
-        .map((session, index) => ({
-          session_number: index + 1,
-          status: session.status
+      // 3. ✅ IMPORTANT: Filter out sessions with null status AND convert to proper format
+      const validSessions = multiSessionCurrentData
+        .filter(session => session.status !== null && session.status !== undefined)
+        .map(session => ({
+          id: session.id,
+          name: session.name,
+          status: session.status as 'P' | 'A' | 'L'  // TypeScript type assertion
         }));
       
-      console.log('Sessions to save:', sessions);
+      console.log('📝 Valid sessions after filtering:', validSessions);
       
-      if (sessions.length === 0) {
+      if (validSessions.length === 0) {
         alert('Please mark attendance for at least one session');
         return;
       }
       
-      // 4. Create payload
+      // 4. Create payload - send sessions in the NEW FORMAT expected by backend
       const payload = {
         student_id: studentIdToSend,
         date: multiSessionDate,
-        sessions: sessions
+        sessions: validSessions  // ✅ Send full session objects, not session_number format
       };
       
       console.log('📤 Request payload:', JSON.stringify(payload, null, 2));
@@ -249,7 +259,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       console.log('🌐 Request URL:', url);
       
       const response = await fetch(url, {
-        method: 'POST',
+        method: 'PUT',  // ✅ Changed from POST to PUT (check your backend route)
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
@@ -282,17 +292,26 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
           console.error('🔍 DEBUG - Student not found:');
           console.error('   Sent student_id:', studentIdToSend);
           console.error('   Student name:', student.name);
+          console.error('   Enrollment mode:', activeClass.enrollment_mode);
           console.error('   All student IDs in class:', activeClass.students.map(s => s.id));
           
           alert(
             `Student not found in backend.\n\n` +
-            `This is a data sync issue. The student ID in your frontend doesn't match the backend.\n\n` +
+            `This is a data sync issue.\n\n` +
             `Sent ID: ${studentIdToSend}\n` +
-            `Student: ${student.name}\n\n` +
+            `Student: ${student.name}\n` +
+            `Enrollment mode: ${activeClass.enrollment_mode}\n\n` +
             `Please:\n` +
             `1. Refresh the page (Ctrl+R or Cmd+R)\n` +
             `2. If that doesn't work, try logging out and back in\n` +
-            `3. If issue persists, contact support`
+            `3. If issue persists, the backend may need to be updated`
+          );
+        } else if (response.status === 405) {
+          alert(
+            `Method Not Allowed (405)\n\n` +
+            `The backend endpoint might be expecting a different HTTP method.\n` +
+            `Current: PUT\n` +
+            `Try checking if the backend expects POST instead.`
           );
         } else {
           alert('Failed to save attendance:\n\n' + errorMessage);
@@ -309,11 +328,15 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       setSelectedDay(null);
       setMultiSessionCurrentData([]);
       
+      // Refresh class data from backend
       await refreshClassData();
       alert('Attendance saved successfully!');
       
     } catch (error) {
       console.error('💥 Error:', error);
+      if (error instanceof Error && !error.message.includes('Failed to save')) {
+        alert('An unexpected error occurred:\n\n' + error.message);
+      }
     }
     
     console.log('=== SAVE MULTI-SESSION DEBUG END ===\n');
