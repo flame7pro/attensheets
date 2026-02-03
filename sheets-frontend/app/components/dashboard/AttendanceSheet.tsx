@@ -184,85 +184,84 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
   };
 
   const handleSaveMultiSession = async () => {
-    console.log('=== SAVE MULTI-SESSION DEBUG START ===');
+    console.log('\n' + '='.repeat(80));
+    console.log('[FRONTEND] SAVE MULTI-SESSION START');
+    console.log('='.repeat(80));
     
     try {
+      // Validation
       if (!selectedStudent || !multiSessionDate || !activeClass) {
+        console.error('[FRONTEND] ❌ Missing required data');
         alert('Please select a student and date');
         return;
       }
   
-      // 1. Find the student object
+      // Find student
       const student = activeClass.students.find(s => s.id === selectedStudent);
       
       if (!student) {
-        console.error('❌ Student not found. selectedStudent:', selectedStudent);
+        console.error('[FRONTEND] ❌ Student not found');
+        console.error('  selectedStudent:', selectedStudent);
+        console.error('  Available IDs:', activeClass.students.map(s => s.id));
         alert('Student not found');
         return;
       }
       
-      console.log('✅ Found student:', student);
-      console.log('   Class enrollment_mode:', activeClass.enrollment_mode);
-      console.log('   Student ID:', student.id, typeof student.id);
-      console.log('   Student object keys:', Object.keys(student));
+      console.log('[FRONTEND] ✅ Found student:', student.name);
+      console.log('  Student ID:', student.id, '(type:', typeof student.id + ')');
+      console.log('  Enrollment mode:', activeClass.enrollment_mode);
       
-      // 2. ✅ FIXED: Determine the correct student ID to send based on enrollment_mode
-      let studentIdToSend: string;
-      
-      // ✅ Use correct variable name: enrollment_mode (with underscore)
+      // Determine student ID to send
       const enrollment_mode = activeClass.enrollment_mode || 'manual_entry';
+      const studentIdToSend = String(student.id);
       
-      if (enrollment_mode === 'enrollment_via_id') {
-        // For enrollment_via_id mode:
-        // - student.id should already be in format "classId_student_X"
-        // - Just use it directly as a string
-        studentIdToSend = String(student.id);
-        console.log('📝 Enrollment via ID mode - using student.id directly:', studentIdToSend);
-      } else {
-        // For manual_entry or import_data modes:
-        // - student.id is a number (timestamp)
-        // - Convert to string
-        studentIdToSend = String(student.id);
-        console.log('📝 Manual/Import mode - using numeric ID as string:', studentIdToSend);
-      }
+      console.log('[FRONTEND] 📝 Will send student_id:', studentIdToSend);
       
-      // 3. ✅ IMPORTANT: Filter out sessions with null status AND convert to proper format
+      // Filter and validate sessions
       const validSessions = multiSessionCurrentData
         .filter(session => session.status !== null && session.status !== undefined)
         .map(session => ({
           id: session.id,
           name: session.name,
-          status: session.status as 'P' | 'A' | 'L'  // TypeScript type assertion
+          status: session.status as 'P' | 'A' | 'L'
         }));
       
-      console.log('📝 Valid sessions after filtering:', validSessions);
+      console.log('[FRONTEND] 📝 Valid sessions:', validSessions.length);
+      validSessions.forEach((s, i) => {
+        console.log(`  Session ${i + 1}: ${s.name} = ${s.status}`);
+      });
       
       if (validSessions.length === 0) {
+        console.error('[FRONTEND] ❌ No valid sessions');
         alert('Please mark attendance for at least one session');
         return;
       }
       
-      // 4. Create payload - send sessions in the NEW FORMAT expected by backend
+      // Create payload
       const payload = {
         student_id: studentIdToSend,
         date: multiSessionDate,
-        sessions: validSessions  // ✅ Send full session objects
+        sessions: validSessions
       };
       
-      console.log('📤 Request payload:', JSON.stringify(payload, null, 2));
+      console.log('[FRONTEND] 📤 Sending payload:');
+      console.log(JSON.stringify(payload, null, 2));
       
-      // 5. Send request
+      // Get token
       const token = localStorage.getItem('access_token');
       if (!token) {
+        console.error('[FRONTEND] ❌ No auth token');
         alert('No authentication token found. Please log in again.');
         return;
       }
       
+      // Make request
       const url = `${process.env.NEXT_PUBLIC_API_URL}/classes/${activeClass.id}/attendance/multi-session`;
-      console.log('🌐 Request URL:', url);
+      console.log('[FRONTEND] 🌐 URL:', url);
+      console.log('[FRONTEND] 🌐 Method: PUT');
       
       const response = await fetch(url, {
-        method: 'PUT',  // ✅ Changed from POST to PUT to match backend
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
@@ -270,11 +269,22 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         body: JSON.stringify(payload),
       });
   
-      console.log('📡 Response status:', response.status);
-      const responseData = await response.json();
-      console.log('📥 Response data:', responseData);
+      console.log('[FRONTEND] 📡 Response status:', response.status);
+      
+      let responseData;
+      try {
+        responseData = await response.json();
+        console.log('[FRONTEND] 📥 Response data:', responseData);
+      } catch (e) {
+        console.error('[FRONTEND] ❌ Failed to parse response JSON');
+        throw new Error('Invalid response from server');
+      }
   
       if (!response.ok) {
+        console.error('[FRONTEND] ❌ Request failed');
+        console.error('  Status:', response.status);
+        console.error('  Detail:', responseData.detail);
+        
         let errorMessage = 'Unknown error';
         if (responseData.detail) {
           if (typeof responseData.detail === 'string') {
@@ -288,61 +298,72 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
           }
         }
         
-        console.error('❌ Request failed:', errorMessage);
-        
         if (response.status === 404) {
-          // Log detailed debug info
-          console.error('🔍 DEBUG - Student not found:');
-          console.error('   Sent student_id:', studentIdToSend);
-          console.error('   Student name:', student.name);
-          console.error('   Enrollment mode:', enrollment_mode);
-          console.error('   All student IDs in class:', activeClass.students.map(s => s.id));
+          console.error('[FRONTEND] 🔍 404 DEBUG:');
+          console.error('  Sent student_id:', studentIdToSend);
+          console.error('  Student name:', student.name);
+          console.error('  Enrollment mode:', enrollment_mode);
+          console.error('  All student IDs:', activeClass.students.map(s => ({ name: s.name, id: s.id })));
           
           alert(
-            `Student not found in backend.\n\n` +
-            `This is a data sync issue.\n\n` +
-            `Sent ID: ${studentIdToSend}\n` +
-            `Student: ${student.name}\n` +
-            `Enrollment mode: ${enrollment_mode}\n\n` +
-            `Please:\n` +
-            `1. Refresh the page (Ctrl+R or Cmd+R)\n` +
-            `2. If that doesn't work, try logging out and back in\n` +
-            `3. If issue persists, the backend may need to be updated`
+            `❌ Student Not Found\n\n` +
+            `The backend couldn't find the student.\n\n` +
+            `Details:\n` +
+            `• Student: ${student.name}\n` +
+            `• Sent ID: ${studentIdToSend}\n` +
+            `• Mode: ${enrollment_mode}\n\n` +
+            `Try:\n` +
+            `1. Refresh the page (Ctrl+R)\n` +
+            `2. Re-login if issue persists`
           );
         } else if (response.status === 405) {
           alert(
-            `Method Not Allowed (405)\n\n` +
-            `The backend endpoint might be expecting a different HTTP method.\n` +
-            `Current: PUT\n` +
-            `Try checking if the backend expects POST instead.`
+            `❌ Method Not Allowed (405)\n\n` +
+            `The endpoint expects a different HTTP method.\n` +
+            `Contact support if this persists.`
           );
         } else {
-          alert('Failed to save attendance:\n\n' + errorMessage);
+          alert(`❌ Failed to save attendance\n\n${errorMessage}`);
         }
         
         throw new Error(errorMessage);
       }
   
-      console.log('✅ SUCCESS! Attendance saved');
+      // Success!
+      console.log('[FRONTEND] ✅ SUCCESS! Attendance saved');
+      console.log('[FRONTEND] 📊 Updated class:', responseData.class);
       
-      // Close modal and refresh
+      // Close modal
       setShowMultiSessionModal(false);
       setSelectedStudent(null);
       setSelectedDay(null);
       setMultiSessionCurrentData([]);
       
-      // Refresh class data from backend
-      await refreshClassData();
-      alert('Attendance saved successfully!');
+      // Refresh class data
+      console.log('[FRONTEND] 🔄 Refreshing class data...');
+      try {
+        await refreshClassData();
+        console.log('[FRONTEND] ✅ Class data refreshed');
+      } catch (refreshError) {
+        console.error('[FRONTEND] ⚠️ Failed to refresh:', refreshError);
+        // Don't block on refresh error - data was saved successfully
+      }
+      
+      alert('✅ Attendance saved successfully!');
+      console.log('='.repeat(80));
+      console.log('[FRONTEND] SAVE MULTI-SESSION END');
+      console.log('='.repeat(80) + '\n');
       
     } catch (error) {
-      console.error('💥 Error:', error);
+      console.error('[FRONTEND] 💥 EXCEPTION:', error);
+      console.log('='.repeat(80));
+      console.log('[FRONTEND] SAVE MULTI-SESSION FAILED');
+      console.log('='.repeat(80) + '\n');
+      
       if (error instanceof Error && !error.message.includes('Failed to save')) {
-        alert('An unexpected error occurred:\n\n' + error.message);
+        alert(`❌ Unexpected Error\n\n${error.message}`);
       }
     }
-    
-    console.log('=== SAVE MULTI-SESSION DEBUG END ===\n');
   };
   
   const handleCloseMultiSession = () => {
