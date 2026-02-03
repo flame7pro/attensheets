@@ -202,21 +202,24 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       }
       
       console.log('✅ Found student:', student);
-      console.log('   Class enrollment mode:', activeClass.enrollment_mode);
+      console.log('   Class enrollment_mode:', activeClass.enrollment_mode);
       console.log('   Student ID:', student.id, typeof student.id);
       console.log('   Student object keys:', Object.keys(student));
       
-      // 2. ✅ FIXED: Determine the correct student ID to send based on enrollment mode
+      // 2. ✅ FIXED: Determine the correct student ID to send based on enrollment_mode
       let studentIdToSend: string;
       
-      if (activeClass.enrollment_mode === 'enrollment_via_id' || activeClass.enrollment_mode === 'link_based_enrollment') {
+      // ✅ Use correct variable name: enrollment_mode (with underscore)
+      const enrollment_mode = activeClass.enrollment_mode || 'manual_entry';
+      
+      if (enrollment_mode === 'enrollment_via_id') {
         // For enrollment_via_id mode:
         // - student.id should already be in format "classId_student_X"
         // - Just use it directly as a string
         studentIdToSend = String(student.id);
         console.log('📝 Enrollment via ID mode - using student.id directly:', studentIdToSend);
       } else {
-        // For manual_entry or import modes:
+        // For manual_entry or import_data modes:
         // - student.id is a number (timestamp)
         // - Convert to string
         studentIdToSend = String(student.id);
@@ -243,7 +246,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       const payload = {
         student_id: studentIdToSend,
         date: multiSessionDate,
-        sessions: validSessions  // ✅ Send full session objects, not session_number format
+        sessions: validSessions  // ✅ Send full session objects
       };
       
       console.log('📤 Request payload:', JSON.stringify(payload, null, 2));
@@ -259,7 +262,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       console.log('🌐 Request URL:', url);
       
       const response = await fetch(url, {
-        method: 'PUT',  // ✅ Changed from POST to PUT (check your backend route)
+        method: 'PUT',  // ✅ Changed from POST to PUT to match backend
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
@@ -292,7 +295,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
           console.error('🔍 DEBUG - Student not found:');
           console.error('   Sent student_id:', studentIdToSend);
           console.error('   Student name:', student.name);
-          console.error('   Enrollment mode:', activeClass.enrollment_mode);
+          console.error('   Enrollment mode:', enrollment_mode);
           console.error('   All student IDs in class:', activeClass.students.map(s => s.id));
           
           alert(
@@ -300,7 +303,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
             `This is a data sync issue.\n\n` +
             `Sent ID: ${studentIdToSend}\n` +
             `Student: ${student.name}\n` +
-            `Enrollment mode: ${activeClass.enrollment_mode}\n\n` +
+            `Enrollment mode: ${enrollment_mode}\n\n` +
             `Please:\n` +
             `1. Refresh the page (Ctrl+R or Cmd+R)\n` +
             `2. If that doesn't work, try logging out and back in\n` +
