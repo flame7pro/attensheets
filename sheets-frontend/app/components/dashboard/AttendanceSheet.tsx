@@ -98,7 +98,11 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       if (response.ok) {
         const data = await response.json();
         console.log('✅ Fresh data received:', data.class);
-        onUpdateClassData(data.class);
+        
+        // Force a complete state update
+        onUpdateClassData({ ...data.class });
+        
+        // Trigger refresh
         setRefreshTrigger(prev => prev + 1);
       }
     } catch (error) {
@@ -191,35 +195,20 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
     console.log('='.repeat(80));
     
     try {
-      // Validation
       if (!selectedStudent || !multiSessionDate || !activeClass) {
         console.error('[FRONTEND] ❌ Missing required data');
         alert('Please select a student and date');
         return;
       }
   
-      // Find student
       const student = activeClass.students.find(s => s.id === selectedStudent);
       
       if (!student) {
         console.error('[FRONTEND] ❌ Student not found');
-        console.error('  selectedStudent:', selectedStudent);
-        console.error('  Available IDs:', activeClass.students.map(s => s.id));
         alert('Student not found');
         return;
       }
       
-      console.log('[FRONTEND] ✅ Found student:', student.name);
-      console.log('  Student ID:', student.id, '(type:', typeof student.id + ')');
-      console.log('  Enrollment mode:', activeClass.enrollment_mode);
-      
-      // Determine student ID to send
-      const enrollment_mode = activeClass.enrollment_mode || 'manual_entry';
-      const studentIdToSend = String(student.id);
-      
-      console.log('[FRONTEND] 📝 Will send student_id:', studentIdToSend);
-      
-      // Filter and validate sessions
       const validSessions = multiSessionCurrentData
         .filter(session => session.status !== null && session.status !== undefined)
         .map(session => ({
@@ -228,39 +217,24 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
           status: session.status as 'P' | 'A' | 'L'
         }));
       
-      console.log('[FRONTEND] 📝 Valid sessions:', validSessions.length);
-      validSessions.forEach((s, i) => {
-        console.log(`  Session ${i + 1}: ${s.name} = ${s.status}`);
-      });
-      
       if (validSessions.length === 0) {
-        console.error('[FRONTEND] ❌ No valid sessions');
         alert('Please mark attendance for at least one session');
         return;
       }
       
-      // Create payload
       const payload = {
-        student_id: studentIdToSend,
+        student_id: String(student.id),
         date: multiSessionDate,
         sessions: validSessions
       };
       
-      console.log('[FRONTEND] 📤 Sending payload:');
-      console.log(JSON.stringify(payload, null, 2));
-      
-      // Get token
       const token = localStorage.getItem('access_token');
       if (!token) {
-        console.error('[FRONTEND] ❌ No auth token');
         alert('No authentication token found. Please log in again.');
         return;
       }
       
-      // Make request
       const url = `${process.env.NEXT_PUBLIC_API_URL}/classes/${activeClass.id}/attendance/multi-session`;
-      console.log('[FRONTEND] 🌐 URL:', url);
-      console.log('[FRONTEND] 🌐 Method: PUT');
       
       const response = await fetch(url, {
         method: 'PUT',
@@ -271,70 +245,19 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         body: JSON.stringify(payload),
       });
   
-      console.log('[FRONTEND] 📡 Response status:', response.status);
-      
-      let responseData;
-      try {
-        responseData = await response.json();
-        console.log('[FRONTEND] 📥 Response data:', responseData);
-      } catch (e) {
-        console.error('[FRONTEND] ❌ Failed to parse response JSON');
-        throw new Error('Invalid response from server');
-      }
+      const responseData = await response.json();
   
       if (!response.ok) {
-        console.error('[FRONTEND] ❌ Request failed');
-        console.error('  Status:', response.status);
-        console.error('  Detail:', responseData.detail);
-        
         let errorMessage = 'Unknown error';
         if (responseData.detail) {
-          if (typeof responseData.detail === 'string') {
-            errorMessage = responseData.detail;
-          } else if (Array.isArray(responseData.detail)) {
-            errorMessage = responseData.detail.map((err: any) => 
-              `${err.loc?.join('.')}: ${err.msg}${err.input ? ` (got: ${JSON.stringify(err.input)})` : ''}`
-            ).join('\n');
-          } else {
-            errorMessage = JSON.stringify(responseData.detail, null, 2);
-          }
+          errorMessage = typeof responseData.detail === 'string' 
+            ? responseData.detail 
+            : JSON.stringify(responseData.detail);
         }
-        
-        if (response.status === 404) {
-          console.error('[FRONTEND] 🔍 404 DEBUG:');
-          console.error('  Sent student_id:', studentIdToSend);
-          console.error('  Student name:', student.name);
-          console.error('  Enrollment mode:', enrollment_mode);
-          console.error('  All student IDs:', activeClass.students.map(s => ({ name: s.name, id: s.id })));
-          
-          alert(
-            `❌ Student Not Found\n\n` +
-            `The backend couldn't find the student.\n\n` +
-            `Details:\n` +
-            `• Student: ${student.name}\n` +
-            `• Sent ID: ${studentIdToSend}\n` +
-            `• Mode: ${enrollment_mode}\n\n` +
-            `Try:\n` +
-            `1. Refresh the page (Ctrl+R)\n` +
-            `2. Re-login if issue persists`
-          );
-        } else if (response.status === 405) {
-          alert(
-            `❌ Method Not Allowed (405)\n\n` +
-            `The endpoint expects a different HTTP method.\n` +
-            `Contact support if this persists.`
-          );
-        } else {
-          alert(`❌ Failed to save attendance\n\n${errorMessage}`);
-        }
-        
         throw new Error(errorMessage);
       }
   
-      // Success!
-      console.log('[FRONTEND] ✅ SUCCESS! Attendance saved');
-      
-      // ✅ ADD THIS BLOCK:
+      // ✅ CRITICAL FIX: Update local state immediately
       const updatedClass = { ...activeClass };
       const studentIndex = updatedClass.students.findIndex(s => s.id === selectedStudent);
       
@@ -346,16 +269,23 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         onUpdateClassData(updatedClass);
       }
       
+      // Close modal
       setShowMultiSessionModal(false);
       setSelectedStudent(null);
       setSelectedDay(null);
       setMultiSessionCurrentData([]);
       
+      // Show success message
       alert('✅ Attendance saved successfully!');
-
-      // Refresh class data
-      setTimeout(() => {
-        refreshClassData();
+  
+      // Refresh from backend after a short delay
+      setTimeout(async () => {
+        try {
+          await refreshClassData();
+          console.log('[FRONTEND] ✅ Class data refreshed from backend');
+        } catch (err) {
+          console.error('[FRONTEND] ⚠️ Failed to refresh:', err);
+        }
       }, 200);
       
       console.log('='.repeat(80));
@@ -364,13 +294,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       
     } catch (error) {
       console.error('[FRONTEND] 💥 EXCEPTION:', error);
-      console.log('='.repeat(80));
-      console.log('[FRONTEND] SAVE MULTI-SESSION FAILED');
-      console.log('='.repeat(80) + '\n');
-      
-      if (error instanceof Error && !error.message.includes('Failed to save')) {
-        alert(`❌ Unexpected Error\n\n${error.message}`);
-      }
+      alert(`❌ Failed to save attendance: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
   
@@ -397,60 +321,47 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
     year: 'numeric'
   });
 
-  const calculateAttendance = (
-    student: Student,
-    daysInMonth: number,
-    currentMonth: number,
-    currentYear: number
-  ): string => {
-    let present = 0;
-    let absent = 0;
-    let late = 0;
-    let total = 0;
-
-    console.log(`[CALCULATE] Processing student: ${student.name}`);
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const attendanceValue = student.attendance[dateKey];
-
-      if (attendanceValue) {
-        // ✅ NEW FORMAT: { sessions: [...], updated_at: "..." }
-        if (typeof attendanceValue === 'object' && 'sessions' in attendanceValue && attendanceValue.sessions) {
-          attendanceValue.sessions.forEach((session) => {
-            if (session.status) {
-              total++;
-              if (session.status === 'P') present++;
-              else if (session.status === 'A') absent++;
-              else if (session.status === 'L') late++;
-            }
-          });
-        }
-        // OLD FORMAT: { status: 'P', count: 2 }
-        else if (typeof attendanceValue === 'object' && 'status' in attendanceValue && attendanceValue.status) {
-          const count = attendanceValue.count || 1;
-          total += count;
-          if (attendanceValue.status === 'P') present += count;
-          else if (attendanceValue.status === 'A') absent += count;
-          else if (attendanceValue.status === 'L') late += count;
-        }
-        // VERY OLD FORMAT: 'P' | 'A' | 'L'
-        else if (typeof attendanceValue === 'string') {
-          total++;
-          if (attendanceValue === 'P') present++;
-          else if (attendanceValue === 'A') absent++;
-          else if (attendanceValue === 'L') late++;
+  const calculateAttendance = React.useMemo(() => {
+    return (student: Student, daysInMonth: number, currentMonth: number, currentYear: number): string => {
+      let present = 0;
+      let absent = 0;
+      let late = 0;
+      let total = 0;
+  
+      for (let day = 1; day <= daysInMonth; day++) {
+        const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const attendanceValue = student.attendance[dateKey];
+  
+        if (attendanceValue) {
+          if (typeof attendanceValue === 'object' && 'sessions' in attendanceValue && attendanceValue.sessions) {
+            attendanceValue.sessions.forEach((session) => {
+              if (session.status) {
+                total++;
+                if (session.status === 'P') present++;
+                else if (session.status === 'A') absent++;
+                else if (session.status === 'L') late++;
+              }
+            });
+          } else if (typeof attendanceValue === 'object' && 'status' in attendanceValue && attendanceValue.status) {
+            const count = attendanceValue.count || 1;
+            total += count;
+            if (attendanceValue.status === 'P') present += count;
+            else if (attendanceValue.status === 'A') absent += count;
+            else if (attendanceValue.status === 'L') late += count;
+          } else if (typeof attendanceValue === 'string') {
+            total++;
+            if (attendanceValue === 'P') present++;
+            else if (attendanceValue === 'A') absent++;
+            else if (attendanceValue === 'L') late++;
+          }
         }
       }
-    }
-
-    const percentage = total > 0 ? ((present + late) / total) * 100 : 0;
-
-    console.log(`[CALCULATE] ${student.name}: ${present}P + ${late}L / ${total} = ${percentage.toFixed(3)}%`);
-
-    return percentage.toFixed(3);
-  };
-
+  
+      const percentage = total > 0 ? ((present + late) / total) * 100 : 0;
+      return percentage.toFixed(3);
+    };
+  }, []);
+    
   const getRiskLevel = (percentage: string) => {
     const pct = parseFloat(percentage);
     if (pct >= thresholds.excellent) {
