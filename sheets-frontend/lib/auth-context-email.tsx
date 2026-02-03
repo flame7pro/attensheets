@@ -63,18 +63,6 @@ async function apiCall<T = any>(endpoint: string, options: RequestInit = {}): Pr
   return response.json();
 }
 
-// ✅ NEW: Helper function to sync storage
-function syncStorage(token: string, user: string, role: string) {
-  // Always save to both storages during active session
-  sessionStorage.setItem('access_token', token);
-  sessionStorage.setItem('user', user);
-  sessionStorage.setItem('user_role', role);
-
-  localStorage.setItem('access_token', token);
-  localStorage.setItem('user', user);
-  localStorage.setItem('user_role', role);
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -91,11 +79,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('🔍 Checking existing session...');
 
+      // Check sessionStorage first (current browser session)
       let storedToken = sessionStorage.getItem('access_token');
       let storedUser = sessionStorage.getItem('user');
       let storedRole = sessionStorage.getItem('user_role');
       let source = 'sessionStorage';
 
+      // If not in sessionStorage, check localStorage (Remember Me was checked)
       if (!storedToken || !storedUser) {
         storedToken = localStorage.getItem('access_token');
         storedUser = localStorage.getItem('user');
@@ -104,9 +94,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       console.log(`📦 Token found in: ${source}`);
+      console.log(`🔑 Token exists: ${!!storedToken}`);
+      console.log(`👤 User exists: ${!!storedUser}`);
 
       if (storedToken && storedUser) {
         try {
+          // Verify token is still valid
           const response = await fetch(`${API_URL}/auth/me`, {
             headers: {
               Authorization: `Bearer ${storedToken}`,
@@ -121,13 +114,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setToken(storedToken);
             setUser(userData);
 
-            // ✅ Sync to both storages
+            // ✅ CRITICAL FIX: Always sync to BOTH storages
+            // This ensures tokens are available in both places during active session
+            sessionStorage.setItem('access_token', storedToken);
+            sessionStorage.setItem('user', storedUser);
             if (storedRole) {
-              syncStorage(storedToken, storedUser, storedRole);
+              sessionStorage.setItem('user_role', storedRole);
+            }
+
+            // If token was in localStorage, keep it there (Remember Me)
+            if (source === 'localStorage') {
+              localStorage.setItem('access_token', storedToken);
+              localStorage.setItem('user', storedUser);
+              if (storedRole) {
+                localStorage.setItem('user_role', storedRole);
+              }
             }
 
             console.log('✅ Session restored successfully');
 
+            // Auto-redirect to dashboard if on auth page
             const currentPath = window.location.pathname;
             if (currentPath === '/auth' || currentPath === '/') {
               const redirectPath = userData.role === 'student' ? '/student/dashboard' : '/dashboard';
@@ -135,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } else {
             console.log('❌ Token validation failed');
+            // Token invalid, clear everything
             clearAllStorage();
           }
         } catch (error) {
@@ -151,12 +158,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkExistingSession();
   }, [router]);
 
+  // ✅ Handle browser close: Clear localStorage if Remember Me wasn't checked
   useEffect(() => {
     const handleBeforeUnload = () => {
       const rememberMe = localStorage.getItem('remember_me') === 'true';
       
       if (!rememberMe) {
         console.log('🧹 Browser closing without Remember Me - Clearing localStorage');
+        // Clear localStorage on browser close (sessionStorage clears automatically)
         localStorage.removeItem('access_token');
         localStorage.removeItem('user');
         localStorage.removeItem('user_role');
@@ -167,7 +176,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, []);
 
   const clearAllStorage = () => {
@@ -175,10 +187,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     console.log('🧹 Clearing all storage...');
     
+    // Clear sessionStorage
     sessionStorage.removeItem('access_token');
     sessionStorage.removeItem('user');
     sessionStorage.removeItem('user_role');
     
+    // Clear localStorage
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
     localStorage.removeItem('user_role');
@@ -189,6 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const endpoint = role === 'student' ? '/auth/student/signup' : '/auth/signup';
 
+      // Only collect device fingerprint for students
       let deviceInfo = null;
       if (role === 'student') {
         deviceInfo = await getDeviceFingerprint();
@@ -201,12 +216,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const body: any = { email, password, name, role };
 
+      // Only add device info for students
       if (role === 'student' && deviceInfo) {
         body.device_id = deviceInfo.id;
         body.device_info = deviceInfo;
       }
 
-      await apiCall(endpoint, {
+      const response = await apiCall(endpoint, {
         method: 'POST',
         body: JSON.stringify(body),
       });
@@ -225,6 +241,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log(`🔐 Login attempt - Remember Me: ${rememberMe}`);
 
+      // Try teacher login first (NO device fingerprinting)
       try {
         console.log('🔍 Attempting teacher login...');
         response = await apiCall('/auth/login', {
@@ -234,6 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role = 'teacher';
         console.log('✅ Teacher login successful');
       } catch (teacherError: any) {
+        // Try student login WITH device fingerprinting
         try {
           console.log('🔍 Attempting student login...');
           deviceInfo = await getDeviceFingerprint();
@@ -251,6 +269,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           role = 'student';
           console.log('✅ Student login successful');
         } catch (studentError: any) {
+          // Check if it's a device authorization error
           if (studentError.message.includes('not authorized') ||
             studentError.message.includes('trusted device')) {
             throw new Error('🚫 Login blocked: This device is not authorized. Please use the trusted device that was used to create this student account.');
@@ -259,16 +278,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      // Save login data
       const userData = { ...response.user, role };
 
-      // ✅ Use syncStorage helper
-      syncStorage(response.access_token, JSON.stringify(userData), role);
+      // ✅ CRITICAL FIX: ALWAYS save to BOTH storages during active session
+      // This allows page refreshes to work without Remember Me
+      sessionStorage.setItem('access_token', response.access_token);
+      sessionStorage.setItem('user', JSON.stringify(userData));
+      sessionStorage.setItem('user_role', role);
+
+      localStorage.setItem('access_token', response.access_token);
+      localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem('user_role', role);
+
+      // ✅ Set a flag for Remember Me to control browser-close behavior
       localStorage.setItem('remember_me', rememberMe.toString());
 
       setToken(response.access_token);
       setUser(userData);
 
       console.log(`✅ Login successful - Role: ${role}, Remember Me: ${rememberMe}`);
+      console.log(`📦 Saved to sessionStorage: ✅`);
+      console.log(`📦 Saved to localStorage: ✅`);
 
       return {
         success: true,
@@ -296,8 +327,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const userData = { ...response.user, role: response.user.role || role };
 
-      // ✅ Use syncStorage helper
-      syncStorage(response.access_token, JSON.stringify(userData), userData.role);
+      // Save to both storages
+      sessionStorage.setItem('access_token', response.access_token);
+      sessionStorage.setItem('user', JSON.stringify(userData));
+      sessionStorage.setItem('user_role', userData.role);
+
+      localStorage.setItem('access_token', response.access_token);
+      localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem('user_role', userData.role);
+      
+      // After signup verification, auto-enable Remember Me
       localStorage.setItem('remember_me', 'true');
 
       if (typeof window !== 'undefined') {
@@ -353,7 +392,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const requestPasswordReset = async (email: string) => {
     try {
-      await apiCall('/auth/request-password-reset', {
+      const response = await apiCall('/auth/request-password-reset', {
         method: 'POST',
         body: JSON.stringify({ email }),
       });
@@ -377,7 +416,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const requestChangePassword = async () => {
     try {
-      await apiCall('/auth/request-change-password', {
+      const response = await apiCall('/auth/request-change-password', {
         method: 'POST',
       });
       return { success: true, message: 'Verification code sent to your email' };
@@ -408,7 +447,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const updatedUser = { ...user!, name: response.name };
       setUser(updatedUser);
       
-      // ✅ Update both storages
+      // Update both storages
       sessionStorage.setItem('user', JSON.stringify(updatedUser));
       localStorage.setItem('user', JSON.stringify(updatedUser));
 
@@ -429,7 +468,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
       setUser(updatedUser);
       
-      // ✅ Update both storages
+      // Update both storages
       sessionStorage.setItem('user', JSON.stringify(updatedUser));
       localStorage.setItem('user', JSON.stringify(updatedUser));
     } catch (error) {
@@ -445,6 +484,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Logout failed:', error);
     } finally {
+      // Clear ALL session data from both storages
       clearAllStorage();
       setToken(null);
       setUser(null);
