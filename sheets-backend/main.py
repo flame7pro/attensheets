@@ -1810,7 +1810,7 @@ async def update_class(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to update class: {str(e)}")
 
-@app.put("/classes/{class_id}/attendance/multi-session")
+@app.put("/classes/{class_id}/attendance/multi-session")  # ✅ Changed from POST to PUT
 async def update_multi_session_attendance(
     class_id: str,
     request: MultiSessionAttendanceUpdate,
@@ -1822,7 +1822,7 @@ async def update_multi_session_attendance(
         print(f"  Class ID: {class_id}")
         print(f"  Student ID: {request.student_id}")
         print(f"  Date: {request.date}")
-        print(f"  Raw sessions: {request.sessions}")
+        print(f"  Sessions: {request.sessions}")
         print("="*80 + "\n")
         
         # Get user
@@ -1830,7 +1830,7 @@ async def update_multi_session_attendance(
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
-        # Filter out sessions with null status
+        # ✅ NEW: Filter sessions BEFORE validation (allow null status during transit)
         valid_sessions = [
             s for s in request.sessions 
             if s.status is not None and s.status in ['P', 'A', 'L']
@@ -1853,79 +1853,97 @@ async def update_multi_session_attendance(
         print(f"[MULTI_SESSION] Enrollment mode: {class_data.get('enrollment_mode')}")
         print(f"[MULTI_SESSION] Total students in class: {len(class_data.get('students', []))}")
         
-        # ✅ ENHANCED STUDENT MATCHING - handles both formats
+        # ✅ CRITICAL FIX: Handle student ID matching for ALL enrollment modes
         student_found = False
         student_record = None
         
+        enrollment_mode = class_data.get('enrollment_mode', 'manual_entry')
+        
+        print(f"[MULTI_SESSION] Looking for student_id: {request.student_id}")
+        print(f"[MULTI_SESSION] Student IDs in class:")
+        for s in class_data.get('students', []):
+            print(f"  - {s.get('name')}: id={s.get('id')} (type: {type(s.get('id'))})")
+        
         for student in class_data['students']:
-            # Log each student for debugging
             student_id = student.get('id')
-            print(f"[MULTI_SESSION] Checking student: {student.get('name')} (ID: {student_id})")
             
-            # Try multiple matching strategies:
-            # 1. Direct ID match (works for all modes)
-            # 2. student_record_id match (for enrollment_via_id mode)
+            # ✅ UNIVERSAL MATCHING LOGIC
+            # Try multiple matching strategies to handle all formats:
             
-            if (student_id == request.student_id or 
-                student.get('student_record_id') == request.student_id):
-                
+            # Strategy 1: Direct string match
+            if str(student_id) == str(request.student_id):
                 student_found = True
                 student_record = student
-                
-                print(f"[MULTI_SESSION] ✅ MATCH FOUND!")
-                print(f"  Matched student: {student.get('name')}")
-                print(f"  Student ID: {student_id}")
-                print(f"  Matching method: {'Direct ID' if student_id == request.student_id else 'student_record_id'}")
-                
-                # Initialize attendance dict if needed
-                if 'attendance' not in student_record:
-                    student_record['attendance'] = {}
-                
-                # Save sessions in NEW FORMAT
-                student_record['attendance'][request.date] = {
-                    'sessions': [
-                        {
-                            'id': s.id,
-                            'name': s.name,
-                            'status': s.status
-                        }
-                        for s in valid_sessions
-                    ],
-                    'updated_at': datetime.now(timezone.utc).isoformat()
-                }
-                
-                print(f"[MULTI_SESSION] Updated attendance for {request.date}")
-                print(f"[MULTI_SESSION] Saved data: {student_record['attendance'][request.date]}")
+                print(f"[MULTI_SESSION] ✅ MATCH FOUND (Direct match)")
                 break
+            
+            # Strategy 2: For enrollment_via_id mode, check if student has email/enrollment
+            if enrollment_mode in ('enrollment_via_id', 'link_based_enrollment'):
+                # In this mode, student.id should be "classId_student_X" format
+                # But let's also check if student_record_id exists
+                if student.get('student_record_id') == request.student_id:
+                    student_found = True
+                    student_record = student
+                    print(f"[MULTI_SESSION] ✅ MATCH FOUND (student_record_id match)")
+                    break
         
-        if not student_found:
+        if not student_found or not student_record:
             print(f"[MULTI_SESSION] ❌ STUDENT NOT FOUND")
             print(f"  Looking for: {request.student_id}")
+            print(f"  Enrollment mode: {enrollment_mode}")
             print(f"  Available student IDs:")
-            for s in class_data['students']:
-                print(f"    - {s.get('id')} ({s.get('name')})")
-                if s.get('student_record_id'):
-                    print(f"      student_record_id: {s.get('student_record_id')}")
+            for s in class_data.get('students', []):
+                print(f"    - {s.get('name')}: {s.get('id')}")
             
             raise HTTPException(
                 status_code=404,
                 detail=f"Student with ID {request.student_id} not found in class {class_id}"
             )
         
+        print(f"[MULTI_SESSION] ✅ Found student: {student_record.get('name')}")
+        
+        # Initialize attendance dict if needed
+        if 'attendance' not in student_record:
+            student_record['attendance'] = {}
+        
+        # ✅ Save attendance in NEW FORMAT (always use sessions array)
+        student_record['attendance'][request.date] = {
+            'sessions': [
+                {
+                    'id': s.id,
+                    'name': s.name,
+                    'status': s.status
+                }
+                for s in valid_sessions
+            ],
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+        
+        print(f"[MULTI_SESSION] ✅ Updated attendance for {request.date}")
+        print(f"[MULTI_SESSION] Saved data: {student_record['attendance'][request.date]}")
+        
         # Recalculate statistics
         class_data['statistics'] = db.calculate_class_statistics(class_data, str(class_id))
         
         # Save to database
         class_data['updated_at'] = datetime.now(timezone.utc).isoformat()
-        class_file = db.get_class_file(user["id"], str(class_id))
-        db.write_json(class_file, class_data)
+        
+        # ✅ Use the database manager's update method properly
+        if DB_TYPE == "mongodb":
+            # MongoDB: use the update_class method
+            updated_class = db.update_class(user["id"], str(class_id), class_data)
+        else:
+            # File-based: write directly
+            class_file = db.get_class_file(user["id"], str(class_id))
+            db.write_json(class_file, class_data)
+            updated_class = class_data
         
         print(f"[MULTI_SESSION] ✅ Successfully saved multi-session attendance")
         
         return {
             "success": True,
             "message": "Multi-session attendance updated successfully",
-            "class": class_data
+            "class": updated_class
         }
         
     except HTTPException:
