@@ -77,7 +77,8 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
   const [multiSessionStudentName, setMultiSessionStudentName] = useState('');
   const [multiSessionDate, setMultiSessionDate] = useState('');
   const [multiSessionCurrentData, setMultiSessionCurrentData] = useState<Array<{ id: string; name: string; status: 'P' | 'A' | 'L' | null }>>([]);
-
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
   const refreshClassData = async () => {
     try {
       const token = localStorage.getItem('access_token');
@@ -98,6 +99,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         const data = await response.json();
         console.log('✅ Fresh data received:', data.class);
         onUpdateClassData(data.class);
+        setRefreshTrigger(prev => prev + 1);
       }
     } catch (error) {
       console.error('❌ Failed to refresh class data:', error);
@@ -331,25 +333,31 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
   
       // Success!
       console.log('[FRONTEND] ✅ SUCCESS! Attendance saved');
-      console.log('[FRONTEND] 📊 Updated class:', responseData.class);
       
-      // Close modal
+      // ✅ ADD THIS BLOCK:
+      const updatedClass = { ...activeClass };
+      const studentIndex = updatedClass.students.findIndex(s => s.id === selectedStudent);
+      
+      if (studentIndex !== -1) {
+        updatedClass.students[studentIndex].attendance[multiSessionDate] = {
+          sessions: validSessions,
+          updated_at: new Date().toISOString()
+        };
+        onUpdateClassData(updatedClass);
+      }
+      
       setShowMultiSessionModal(false);
       setSelectedStudent(null);
       setSelectedDay(null);
       setMultiSessionCurrentData([]);
       
-      // Refresh class data
-      console.log('[FRONTEND] 🔄 Refreshing class data...');
-      try {
-        await refreshClassData();
-        console.log('[FRONTEND] ✅ Class data refreshed');
-      } catch (refreshError) {
-        console.error('[FRONTEND] ⚠️ Failed to refresh:', refreshError);
-        // Don't block on refresh error - data was saved successfully
-      }
-      
       alert('✅ Attendance saved successfully!');
+
+      // Refresh class data
+      setTimeout(() => {
+        refreshClassData();
+      }, 200);
+      
       console.log('='.repeat(80));
       console.log('[FRONTEND] SAVE MULTI-SESSION END');
       console.log('='.repeat(80) + '\n');
