@@ -77,7 +77,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     processingRef.current = false;
                     setProcessing(false);
                     lastScannedCodeRef.current = ''; // ✅ Reset for retry
-                }, 2000);
+                }, 1500);
                 return;
             }
     
@@ -97,7 +97,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     processingRef.current = false;
                     setProcessing(false);
                     lastScannedCodeRef.current = ''; // ✅ Reset for retry
-                }, 2000);
+                }, 1500);
                 return;
             }
             console.log('[STUDENT SCANNER] ✅ Step 2: All fields present');
@@ -117,7 +117,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     processingRef.current = false;
                     setProcessing(false);
                     lastScannedCodeRef.current = ''; // ✅ Reset for retry
-                }, 2000);
+                }, 1500);
                 return;
             }
             console.log('[STUDENT SCANNER] ✅ Step 3: Class match confirmed');
@@ -138,7 +138,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     processingRef.current = false;
                     setProcessing(false);
                     lastScannedCodeRef.current = ''; // ✅ Reset for retry
-                }, 2000);
+                }, 1500);
                 return;
             }
             console.log('[STUDENT SCANNER] ✅ Step 4: Token found');
@@ -184,12 +184,12 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 message: data.message || 'Attendance marked successfully!' 
             });
             
-            // Close after 2.5 seconds
+            // Close after 1.5 seconds
             setTimeout(() => {
                 setScanning(false);
                 setProcessing(false);
                 onClose();
-            }, 2500);
+            }, 1500);
     
         } catch (error: any) {
             console.error('[STUDENT SCANNER] ❌ FATAL ERROR:', error);
@@ -203,7 +203,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 processingRef.current = false;
                 setProcessing(false);
                 lastScannedCodeRef.current = ''; // ✅ Reset for retry
-            }, 2000);
+            }, 1500);
         } finally {
             console.log('[STUDENT SCANNER] ='.repeat(30));
         }
