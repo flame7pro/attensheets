@@ -1,5 +1,3 @@
-// QRAttendanceModal.tsx - FULLY RESPONSIVE WITH IMPROVED QR CODE ZOOM
-
 import React, { useState, useEffect, useRef } from 'react';
 import { X, QrCode, Users, Clock, Zap, CheckCircle, Calendar, Maximize2, Minimize2 } from 'lucide-react';
 import QRCode from 'qrcode';
@@ -10,7 +8,6 @@ interface QRAttendanceModalProps {
     totalStudents: number;
     currentDate: string; // YYYY-MM-DD format
     onClose: () => void;
-    onUpdateClassData?: (updatedClass: any) => void; // ✅ Add this
 }
 
 export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
@@ -19,7 +16,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
     totalStudents,
     currentDate,
     onClose,
-    onUpdateClassData, // ✅ Add this
 }) => {
     const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
     const [currentCode, setCurrentCode] = useState<string>('');
@@ -122,67 +118,98 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
     };
 
     // ✅ UNIFIED EFFECT - Handles both countdown and polling
-    @app.get("/qr/session/{class_id}")
-async def get_qr_session(class_id: str, date: str, email: str = Depends(verify_token)):
-    """Get active QR session with smooth auto-rotation"""
-    user = db.get_user_by_email(email)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    session_key = f"{class_id}_{date}"
-    
-    # Check active sessions
-    if not hasattr(db, 'active_qr_sessions'):
-        db.active_qr_sessions = {}
-    
-    session = db.active_qr_sessions.get(session_key)
-    
-    if not session or session["teacher_id"] != user["id"]:
-        return {"active": False}
-    
-    # ✅ FIX: Smooth rotation with proper timezone handling
-    import random
-    import string
-    
-    rotation_interval = session.get("rotation_interval", 5)
-    last_rotation_str = session.get("code_generated_at") or session.get("last_rotation") or session.get("started_at")
-    
-    try:
-        # Parse timestamp (handle both Z and non-Z formats)
-        if isinstance(last_rotation_str, str):
-            if last_rotation_str.endswith('Z'):
-                last_rotation_str = last_rotation_str[:-1]
-            last_rotation = datetime.fromisoformat(last_rotation_str)
-        else:
-            last_rotation = last_rotation_str
-        
-        # Make timezone-aware if needed
-        if last_rotation.tzinfo is None:
-            last_rotation = last_rotation.replace(tzinfo=timezone.utc)
-        
-        # Calculate elapsed time
-        now = datetime.now(timezone.utc)
-        elapsed_seconds = (now - last_rotation).total_seconds()
-        
-        # ✅ Rotate if interval passed (with 0.3s buffer to prevent edge cases)
-        if elapsed_seconds >= (rotation_interval - 0.3):
-            new_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-            now_iso = now.isoformat()
+    useEffect(() => {
+        if (!isActive) return;
+
+        let animationFrameId: number;
+        let pollIntervalId: NodeJS.Timeout;
+
+        // ✅ SMOOTH COUNTDOWN using requestAnimationFrame
+        const updateCountdown = () => {
+            if (!isActive) return;
+
+            const now = Date.now();
+            const elapsed = Math.floor((now - clientStartTime.current) / 1000);
+            const cyclePosition = elapsed % intervalDuration.current;
+            const remaining = intervalDuration.current - cyclePosition;
             
-            session["current_code"] = new_code
-            session["last_rotation"] = now_iso
-            session["code_generated_at"] = now_iso
+            // Ensure we never show 0 or negative
+            setTimeLeft(remaining > 0 ? remaining : intervalDuration.current);
             
-            # Update in memory
-            db.active_qr_sessions[session_key] = session
-            
-            print(f"[QR_ROTATION] ✅ Code rotated to: {new_code} (after {elapsed_seconds:.1f}s)")
-        
-    except Exception as e:
-        print(f"[QR_ROTATION] ⚠️ Rotation error: {e}")
-        # Don't crash - return current session
-    
-    return {"active": True, "session": session}
+            // Continue animation loop
+            animationFrameId = requestAnimationFrame(updateCountdown);
+        };
+
+        // ✅ BACKEND POLLING for updates
+        const pollSession = async () => {
+            try {
+                const token = localStorage.getItem('access_token');
+                if (!token) return;
+
+                const res = await fetch(
+                    `${process.env.NEXT_PUBLIC_API_URL}/qr/session/${classId}?date=${currentDate}`,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                        },
+                    }
+                );
+
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data.active || !data.session) return;
+
+                const session = data.session;
+                
+                // Update stats (always safe)
+                setScannedCount(session.scanned_students?.length ?? 0);
+                setSessionNumber(session.session_number || 1);
+
+                const newCode = session.current_code;
+                const newInterval = Number(session.rotation_interval ?? intervalDuration.current);
+                
+                // ✅ CRITICAL: Only reset timer when code actually changes
+                if (newCode && newCode !== currentCode) {
+                    console.log('[QR MODAL] 🔄 Code rotated to:', newCode);
+                    
+                    // Reset timer from NOW
+                    clientStartTime.current = Date.now();
+                    intervalDuration.current = newInterval;
+                    
+                    setRotationInterval(newInterval);
+                    setCurrentCode(newCode);
+                    await generateQRCode(newCode);
+                    
+                    console.log('[QR MODAL] ⏰ Timer reset to:', newInterval + 's');
+                } else {
+                    // ✅ Interval changed but code didn't rotate yet
+                    if (newInterval !== intervalDuration.current) {
+                        console.log(`[QR MODAL] ⚙️ Interval updated: ${intervalDuration.current}s → ${newInterval}s`);
+                        intervalDuration.current = newInterval;
+                        setRotationInterval(newInterval);
+                        // DON'T reset clientStartTime - let current cycle finish
+                    }
+                }
+
+            } catch (e: unknown) {
+                console.error('[QR MODAL] Poll error', e);
+            }
+        };
+
+        // ✅ Start smooth countdown animation
+        animationFrameId = requestAnimationFrame(updateCountdown);
+
+        // ✅ Start polling (every 1 second)
+        pollIntervalId = setInterval(pollSession, 1000);
+
+        // ✅ Cleanup on unmount or when isActive changes
+        return () => {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            clearInterval(pollIntervalId);
+        };
+    }, [isActive, classId, currentDate, currentCode]);
 
     // ✅ ESC KEY HANDLER - Close zoom modal on ESC key press
     useEffect(() => {
@@ -210,7 +237,7 @@ async def get_qr_session(class_id: str, date: str, email: str = Depends(verify_t
                 setIsStopping(false);
                 return;
             }
-    
+
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_URL}/qr/stop-session`,
                 {
@@ -225,36 +252,13 @@ async def get_qr_session(class_id: str, date: str, email: str = Depends(verify_t
                     }),
                 }
             );
-    
+
             if (!response.ok) {
                 const text = await response.text();
                 throw new Error(text || 'Failed to stop QR session');
             }
-    
+
             const data = await response.json();
-            
-            // ✅ FIX: Fetch updated class data immediately
-            console.log('[QR_STOP] Fetching updated class data...');
-            const classResponse = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/classes/${classId}`,
-                {
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    }
-                }
-            );
-    
-            if (classResponse.ok) {
-                const classData = await classResponse.json();
-                
-                // ✅ Trigger parent component update (you need to add this prop)
-                // Add onUpdateClassData prop to QRAttendanceModalProps interface
-                if (onUpdateClassData) {
-                    onUpdateClassData(classData.class);
-                    console.log('[QR_STOP] ✅ Parent component updated with fresh data');
-                }
-            }
-            
             showNotification('success', `Session ${sessionNumber} completed! ${data.scanned_count} present, ${data.absent_count} absent.`);
             
             setTimeout(() => {
@@ -268,7 +272,7 @@ async def get_qr_session(class_id: str, date: str, email: str = Depends(verify_t
             setIsStopping(false);
         }
     };
-    
+
     return (
         <>
             {/* Main Modal */}
