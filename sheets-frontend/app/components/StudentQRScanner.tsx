@@ -29,6 +29,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
     const isScanningRef = useRef<boolean>(false);
     const processingRef = useRef<boolean>(false);
     const selectedClassRef = useRef<string>('');
+    const lastScannedCodeRef = useRef<string>(''); // ✅ OPTIMIZATION: Prevent duplicate scans
 
     // Keep refs in sync
     useEffect(() => {
@@ -44,15 +45,16 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
         setProcessing(false);
     }, []);
 
-    // Stable callback that doesn't change on re-renders
+    // ✅ OPTIMIZED: Stable callback with duplicate prevention
     const onScanSuccess = useCallback(async (decodedText: string) => {
-        if (processingRef.current || isCleaningUpRef.current) {
-            console.log('[STUDENT SCANNER] ⏭️ Skipping - already processing or cleaning up');
+        // ✅ OPTIMIZATION: Skip if processing or duplicate
+        if (processingRef.current || isCleaningUpRef.current || decodedText === lastScannedCodeRef.current) {
             return;
         }
         
         processingRef.current = true;
         setProcessing(true);
+        lastScannedCodeRef.current = decodedText; // ✅ Remember this code
     
         console.log('[STUDENT SCANNER] ='.repeat(30));
         console.log('[STUDENT SCANNER] 🎯 QR Code Scanned (RAW):', decodedText);
@@ -74,6 +76,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     setResult(null);
                     processingRef.current = false;
                     setProcessing(false);
+                    lastScannedCodeRef.current = ''; // ✅ Reset for retry
                 }, 2000);
                 return;
             }
@@ -93,6 +96,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     setResult(null);
                     processingRef.current = false;
                     setProcessing(false);
+                    lastScannedCodeRef.current = ''; // ✅ Reset for retry
                 }, 2000);
                 return;
             }
@@ -112,6 +116,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     setResult(null);
                     processingRef.current = false;
                     setProcessing(false);
+                    lastScannedCodeRef.current = ''; // ✅ Reset for retry
                 }, 2000);
                 return;
             }
@@ -132,6 +137,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     setResult(null);
                     processingRef.current = false;
                     setProcessing(false);
+                    lastScannedCodeRef.current = ''; // ✅ Reset for retry
                 }, 2000);
                 return;
             }
@@ -196,13 +202,14 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 setResult(null);
                 processingRef.current = false;
                 setProcessing(false);
+                lastScannedCodeRef.current = ''; // ✅ Reset for retry
             }, 2000);
         } finally {
             console.log('[STUDENT SCANNER] ='.repeat(30));
         }
-    }, [onClose]); // Only depends on onClose, which is stable
+    }, [onClose]);
 
-    // Stable failure callback
+    // ✅ OPTIMIZED: Silent failure callback (no spam)
     const onScanFailure = useCallback((_error: string) => {
         // Ignore scan failures
     }, []);
@@ -249,14 +256,16 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
 
                 html5QrRef.current = new Html5Qrcode(regionId);
 
+                // ✅ OPTIMIZED CONFIG: Higher FPS for faster scanning
                 const config = {
-                    fps: 10,
+                    fps: 30, // ✅ OPTIMIZATION: Increased from 10 to 30 for 3x faster scanning
                     qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
                         const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
                         const size = Math.max(220, Math.min(360, Math.floor(minEdge * 0.78)));
                         return { width: size, height: size };
                     },
                     aspectRatio: 1.0,
+                    disableFlip: false, // ✅ OPTIMIZATION: Enable flip for better detection
                 };
 
                 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -383,7 +392,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     }
                 });
         };
-    }, [scanning]); // Only depend on scanning - callbacks are now stable!
+    }, [scanning, onScanSuccess, onScanFailure]);
 
     const startScanning = () => {
         if (!selectedClass) {
@@ -393,6 +402,8 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
 
         console.log('[STUDENT SCANNER] 🎬 Starting scanner for class:', selectedClass);
         setResult(null);
+        setProcessing(false);
+        lastScannedCodeRef.current = ''; // ✅ OPTIMIZATION: Reset duplicate check
         setScanning(true);
     };
 
@@ -416,8 +427,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     </div>
                     <button
                         onClick={() => {
-                            setScanning(false);
-                            setProcessing(false);
+                            stopScanning();
                             onClose();
                         }}
                         className="p-2 hover:bg-teal-700 rounded-lg transition-colors cursor-pointer"
@@ -490,10 +500,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                                                 {filteredClasses.map((cls) => (
                                                     <button
                                                         key={cls.classid}
-                                                        onClick={() => {
-                                                            console.log('[STUDENT SCANNER] Selected class:', cls.classid, cls.classname);
-                                                            setSelectedClass(cls.classid);
-                                                        }}
+                                                        onClick={() => setSelectedClass(cls.classid)}
                                                         className={`w-full text-left p-3 md:p-4 rounded-xl border-2 transition-all cursor-pointer ${selectedClass === cls.classid
                                                             ? 'border-teal-500 bg-teal-50'
                                                             : 'border-slate-200 hover:border-teal-300 hover:bg-slate-50'
@@ -540,7 +547,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                                 </div>
                             </div>
 
-                            {/* Modern Success/Error Notification - Below Scanner */}
+                            {/* Success/Error Notification */}
                             {result && (
                                 <div className="w-full max-w-md mx-auto animate-slideUp">
                                     <div className={`
@@ -551,7 +558,6 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                                         }
                                     `}>
                                         <div className="flex items-start gap-3">
-                                            {/* Icon */}
                                             <div className={`flex-shrink-0 ${result.success ? 'animate-bounceIn' : 'animate-shake'}`}>
                                                 {result.success ? (
                                                     <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center">
@@ -564,7 +570,6 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                                                 )}
                                             </div>
                                             
-                                            {/* Content */}
                                             <div className="flex-1 min-w-0 pt-0.5">
                                                 <p className="font-bold text-white text-base mb-1">
                                                     {result.success ? 'Success!' : 'Error'}
@@ -573,7 +578,6 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                                                     {result.message}
                                                 </p>
                                                 
-                                                {/* Progress bar for success */}
                                                 {result.success && (
                                                     <div className="mt-3">
                                                         <div className="w-full bg-white/30 rounded-full h-1 overflow-hidden">
@@ -615,36 +619,20 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                                 }
                                 
                                 @keyframes bounceIn {
-                                    0% {
-                                        transform: scale(0);
-                                    }
-                                    50% {
-                                        transform: scale(1.2);
-                                    }
-                                    100% {
-                                        transform: scale(1);
-                                    }
+                                    0% { transform: scale(0); }
+                                    50% { transform: scale(1.2); }
+                                    100% { transform: scale(1); }
                                 }
                                 
                                 @keyframes shake {
-                                    0%, 100% {
-                                        transform: translateX(0);
-                                    }
-                                    25% {
-                                        transform: translateX(-8px);
-                                    }
-                                    75% {
-                                        transform: translateX(8px);
-                                    }
+                                    0%, 100% { transform: translateX(0); }
+                                    25% { transform: translateX(-8px); }
+                                    75% { transform: translateX(8px); }
                                 }
                                 
                                 @keyframes progressBar {
-                                    from {
-                                        width: 0%;
-                                    }
-                                    to {
-                                        width: 100%;
-                                    }
+                                    from { width: 0%; }
+                                    to { width: 100%; }
                                 }
                                 
                                 .animate-slideUp {
@@ -660,7 +648,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                                 }
                                 
                                 .animate-progressBar {
-                                    animation: progressBar 2.5s linear forwards;
+                                    animation: progressBar 1.5s linear forwards;
                                 }
                             `}</style>
 
