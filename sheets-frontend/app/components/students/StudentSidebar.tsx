@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Settings, LogOut, BookOpen, X, QrCode } from 'lucide-react';
+import { Plus, Settings, LogOut, BookOpen, X, QrCode, Smartphone } from 'lucide-react';
 
 interface ClassInfo {
   classid: string;
@@ -15,6 +15,7 @@ interface StudentSidebarProps {
   onSettings: () => void;
   onLogout: () => void;
   onQRScan: () => void;
+  onManageDevices?: () => void; // ✅ NEW PROP
 }
 
 export const StudentSidebar: React.FC<StudentSidebarProps> = ({
@@ -25,6 +26,7 @@ export const StudentSidebar: React.FC<StudentSidebarProps> = ({
   onSettings,
   onLogout,
   onQRScan,
+  onManageDevices, // ✅ NEW PROP
 }) => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -144,6 +146,17 @@ export const StudentSidebar: React.FC<StudentSidebarProps> = ({
               >
                 <QrCode className="w-4 h-4" />
                 Scan QR Code
+              </button>
+            )}
+
+            {/* ✅ NEW: MY DEVICES BUTTON - Only show if onManageDevices is provided */}
+            {onManageDevices && (
+              <button
+                onClick={onManageDevices}
+                className="w-full mt-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Smartphone className="w-4 h-4" />
+                My Devices
               </button>
             )}
           </div>
