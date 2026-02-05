@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Plus, X, BarChart3, Settings, FileText, Users, LayoutDashboard, LogOut, Edit2, Check, GraduationCap, Smartphone } from 'lucide-react';
+import { Plus, X, BarChart3, Settings, FileText, Users, LayoutDashboard, LogOut, Edit2, Check, GraduationCap } from 'lucide-react';
 import { Class, Student, CustomColumn } from '@/types';
 
 interface SidebarProps {
@@ -16,7 +16,6 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onLogout: () => void;
   onUpdateClassName: (id: number, newName: string) => void;
-  onManageDevices: () => void; // ✅ NEW PROP
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -31,7 +30,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   onLogout,
   onUpdateClassName,
-  onManageDevices, // ✅ NEW PROP
 }) => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -243,17 +241,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <LayoutDashboard className="w-4 h-4" />
                 Dashboard
-              </button>
-            )}
-
-            {/* ✅ NEW: Manage Student Devices Button */}
-            {classes.length > 0 && (
-              <button
-                onClick={onManageDevices}
-                className="w-full flex items-center gap-3 px-4 py-2 text-slate-700 hover:bg-emerald-50 rounded-lg transition-colors"
-              >
-                <Smartphone className="w-5 h-5 text-slate-600" />
-                {!collapsed && <span>Manage Devices</span>}
               </button>
             )}
 
