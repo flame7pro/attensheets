@@ -253,13 +253,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                                 </h2>
                                 <p className="text-emerald-50 text-xs sm:text-sm mt-0.5 truncate">{className}</p>
                             </div>
-                            <button
-                                onClick={onClose}
-                                className="ml-2 p-1.5 sm:p-2 hover:bg-white/20 rounded-lg transition-colors flex-shrink-0 min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] flex items-center justify-center"
-                                aria-label="Close modal"
-                            >
-                                <X className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
-                            </button>
                         </div>
                     </div>
 
