@@ -47,7 +47,6 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
   const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
-    console.log('[DEVICE_MANAGER] Loading devices for:', studentEmail, studentName);
     fetchDevices();
   }, [studentEmail]);
 
@@ -63,10 +62,7 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
         return;
       }
 
-      console.log('[DEVICE_MANAGER] Fetching devices from API...');
       const url = `${process.env.NEXT_PUBLIC_API_URL}/admin/student-devices/${encodeURIComponent(studentEmail)}`;
-      console.log('[DEVICE_MANAGER] API URL:', url);
-
       const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -74,21 +70,14 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
         }
       });
 
-      console.log('[DEVICE_MANAGER] Response status:', response.status);
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        console.error('[DEVICE_MANAGER] API Error:', errorData);
-        throw new Error(errorData.detail || `Failed to fetch devices (${response.status})`);
+        throw new Error(errorData.detail || `Failed to fetch devices`);
       }
 
       const data = await response.json();
-      console.log('[DEVICE_MANAGER] Received data:', data);
-      
       setDevices(data.devices || []);
-      console.log('[DEVICE_MANAGER] ✅ Loaded', data.devices?.length || 0, 'devices');
     } catch (err: any) {
-      console.error('[DEVICE_MANAGER] ❌ Error:', err);
       setError(err.message || 'Failed to load devices');
     } finally {
       setLoading(false);
@@ -96,7 +85,7 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
   };
 
   const handleRemoveDevice = async (deviceHash: string) => {
-    if (!confirm('Are you sure you want to remove this device? The student will not be able to login from this device anymore.')) {
+    if (!confirm('Are you sure you want to remove this device?')) {
       return;
     }
 
@@ -125,7 +114,6 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
       const data = await response.json();
       setSuccess(data.message || 'Device removed successfully');
       fetchDevices();
-
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
       setError(err.message || 'Failed to remove device');
@@ -134,7 +122,7 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
   };
 
   const handleResetAllDevices = async () => {
-    if (!confirm(`⚠️ WARNING: This will remove ALL trusted devices for ${studentName}. They will need to re-register their device on next login. Continue?`)) {
+    if (!confirm(`⚠️ WARNING: This will remove ALL trusted devices for ${studentName}. Continue?`)) {
       return;
     }
 
@@ -158,7 +146,6 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
       const data = await response.json();
       setSuccess(data.message || 'All devices cleared successfully');
       fetchDevices();
-
       setTimeout(() => setSuccess(''), 5000);
     } catch (err: any) {
       setError(err.message || 'Failed to reset devices');
@@ -189,17 +176,15 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="bg-white border-b border-slate-200 p-6">
+        <div className="px-6 md:px-8 py-6 border-b border-slate-200">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-slate-900 mb-1">Device Management</h2>
-              <p className="text-sm text-slate-600">
-                Managing devices for <span className="font-semibold">{studentName}</span>
-              </p>
-              <p className="text-xs text-slate-500 mt-1">{studentEmail}</p>
+              <h2 className="text-2xl md:text-3xl font-bold text-slate-900">Device Management</h2>
+              <p className="text-slate-600 text-sm mt-1">Managing devices for <span className="font-semibold">{studentName}</span></p>
+              <p className="text-slate-500 text-xs mt-0.5">{studentEmail}</p>
             </div>
             <button
               onClick={onClose}
@@ -210,70 +195,62 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
           </div>
         </div>
 
-        {/* Messages */}
-        <div className="p-6 space-y-3">
+        {/* Content */}
+        <div className="p-6 md:p-8 overflow-y-auto max-h-[calc(90vh-200px)]">
+          {/* Messages */}
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm flex items-start gap-2">
-              <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold">Error</p>
-                <p>{error}</p>
-              </div>
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-red-700 text-sm">{error}</p>
             </div>
           )}
 
           {success && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-green-700 text-sm flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 flex-shrink-0" />
-              {success}
+            <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-green-700 text-sm">{success}</p>
             </div>
           )}
 
           {/* Action Buttons */}
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3 mb-6">
             <button
               onClick={() => setShowAddModal(true)}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-sm disabled:opacity-50"
             >
-              <Plus className="w-4 h-4" />
-              Add New Device
+              <Plus className="w-4 h-4 inline-block mr-2" />
+              Add Device
             </button>
 
             <button
               onClick={handleResetAllDevices}
               disabled={devices.length === 0 || loading}
-              className="flex items-center gap-2 px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-sm disabled:opacity-50"
             >
-              <RefreshCw className="w-4 h-4" />
-              Reset All Devices
+              <RefreshCw className="w-4 h-4 inline-block mr-2" />
+              Reset All
             </button>
 
             <button
               onClick={fetchDevices}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2.5 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors font-medium text-sm disabled:opacity-50"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-4 h-4 inline-block mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </button>
           </div>
-        </div>
 
-        {/* Device List */}
-        <div className="px-6 pb-6 max-h-[500px] overflow-y-auto">
+          {/* Device List */}
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-emerald-600 animate-spin mb-4" />
-              <p className="text-slate-600 text-sm">Loading devices...</p>
+              <p className="text-slate-600">Loading devices...</p>
             </div>
           ) : devices.length === 0 ? (
             <div className="text-center py-12">
               <Shield className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-600 font-medium">No trusted devices found</p>
-              <p className="text-slate-500 text-sm mt-1">
-                Student hasn't logged in yet or all devices have been removed
-              </p>
+              <p className="text-slate-600 font-medium mb-2">No trusted devices found</p>
+              <p className="text-slate-500 text-sm">Student hasn't logged in yet</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -282,7 +259,7 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
                 return (
                   <div
                     key={device.device_hash || index}
-                    className="bg-slate-50 border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                    className="bg-slate-50 border border-slate-200 rounded-xl p-4"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex gap-4 flex-1">
@@ -292,60 +269,39 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
-                            <h3 className="font-semibold text-slate-900 text-base">
-                              {device.name}
-                            </h3>
-                            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                              Trusted
-                            </span>
+                            <h3 className="font-semibold text-slate-900">{device.name}</h3>
+                            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">Trusted</span>
                           </div>
 
-                          <div className="grid grid-cols-2 gap-3 text-sm mb-3">
+                          <div className="grid grid-cols-2 gap-3 text-sm mb-2">
                             <div>
                               <p className="text-slate-500 text-xs">Browser</p>
                               <p className="text-slate-700 font-medium">{device.browser}</p>
                             </div>
                             <div>
-                              <p className="text-slate-500 text-xs">Operating System</p>
+                              <p className="text-slate-500 text-xs">OS</p>
                               <p className="text-slate-700 font-medium">{device.os}</p>
                             </div>
                             <div>
-                              <p className="text-slate-500 text-xs flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                First Seen
-                              </p>
-                              <p className="text-slate-700 font-medium text-xs">
-                                {formatDate(device.first_seen)}
-                              </p>
+                              <p className="text-slate-500 text-xs">First Seen</p>
+                              <p className="text-slate-700 text-xs">{formatDate(device.first_seen)}</p>
                             </div>
                             <div>
-                              <p className="text-slate-500 text-xs flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                Last Login
-                              </p>
-                              <p className="text-slate-700 font-medium text-xs">
-                                {formatDate(device.last_seen)}
-                              </p>
+                              <p className="text-slate-500 text-xs">Last Login</p>
+                              <p className="text-slate-700 text-xs">{formatDate(device.last_seen)}</p>
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-4">
-                            <div className="text-xs text-slate-600">
-                              <span className="font-semibold">{device.login_count}</span> total logins
-                            </div>
-                            {device.device_hash && (
-                              <div className="text-xs text-slate-500 font-mono">
-                                ID: {device.device_hash}
-                              </div>
-                            )}
-                          </div>
+                          <p className="text-xs text-slate-600">
+                            <span className="font-semibold">{device.login_count}</span> total logins
+                          </p>
                         </div>
                       </div>
 
                       <button
                         onClick={() => handleRemoveDevice(device.device_hash || '')}
                         disabled={devices.length === 1}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
                         title={devices.length === 1 ? "Cannot remove last device" : "Remove device"}
                       >
                         <Trash2 className="w-5 h-5" />
@@ -359,9 +315,9 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="bg-slate-50 border-t border-slate-200 p-4 text-center">
-          <p className="text-xs text-slate-600">
-            ⚠️ Device changes take effect immediately. Student will be logged out from removed devices.
+        <div className="px-6 md:px-8 py-4 bg-slate-50 border-t border-slate-200">
+          <p className="text-xs text-slate-600 text-center">
+            ⚠️ Device changes take effect immediately
           </p>
         </div>
       </div>
@@ -416,10 +372,7 @@ const AddDeviceModal: React.FC<AddDeviceModalProps> = ({
 
     setLoading(true);
     try {
-      // ✅ AUTO-GENERATE device fingerprint
-      console.log('🔍 Generating device fingerprint...');
       const deviceFingerprint = await getDeviceFingerprint();
-      console.log('✅ Device fingerprint generated:', deviceFingerprint.id);
 
       const token = localStorage.getItem('access_token');
       const response = await fetch(
@@ -451,130 +404,132 @@ const AddDeviceModal: React.FC<AddDeviceModalProps> = ({
 
       onSuccess();
     } catch (err: any) {
-      setError(err.message || 'Failed to add device. Please try again.');
+      setError(err.message || 'Failed to add device');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        <div className="bg-white border-b border-slate-200 p-6">
-          <h3 className="text-xl font-bold text-slate-900 mb-1">Add New Trusted Device</h3>
-          <p className="text-sm text-slate-600">For {studentName}</p>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+        <div className="px-6 md:px-8 py-6 border-b border-slate-200">
+          <h3 className="text-2xl font-bold text-slate-900">Add Trusted Device</h3>
+          <p className="text-slate-600 text-sm mt-1">For {studentName}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 md:p-8">
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm">
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
               {error}
             </div>
           )}
 
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-700 text-sm">
-            <p className="font-semibold mb-1">ℹ️ Device ID Auto-Generation</p>
-            <p>A unique device ID will be automatically generated when you click "Add Device".</p>
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 text-sm">
+            <p className="font-semibold mb-1">ℹ️ Auto-Generated Device ID</p>
+            <p className="text-xs">A unique device ID will be automatically generated</p>
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Device Name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.device_name}
-              onChange={(e) => setFormData({ ...formData, device_name: e.target.value })}
-              placeholder="e.g., Student's iPhone 13"
-              className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all text-sm"
-              disabled={loading}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-4">
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Browser <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Device Name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
-                value={formData.browser}
-                onChange={(e) => setFormData({ ...formData, browser: e.target.value })}
-                placeholder="e.g., Chrome"
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all text-sm"
+                value={formData.device_name}
+                onChange={(e) => setFormData({ ...formData, device_name: e.target.value })}
+                placeholder="e.g., Student's iPhone 13"
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 disabled={loading}
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Browser <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.browser}
+                  onChange={(e) => setFormData({ ...formData, browser: e.target.value })}
+                  placeholder="e.g., Chrome"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  disabled={loading}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  OS <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.os}
+                  onChange={(e) => setFormData({ ...formData, os: e.target.value })}
+                  placeholder="e.g., iOS 17"
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                OS <span className="text-red-500">*</span>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Device Type
               </label>
-              <input
-                type="text"
-                value={formData.os}
-                onChange={(e) => setFormData({ ...formData, os: e.target.value })}
-                placeholder="e.g., iOS 17"
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all text-sm"
+              <select
+                value={formData.device_type}
+                onChange={(e) => setFormData({ ...formData, device_type: e.target.value })}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                disabled={loading}
+              >
+                <option value="">Select type</option>
+                <option value="Mobile">Mobile</option>
+                <option value="Tablet">Tablet</option>
+                <option value="Laptop">Laptop</option>
+                <option value="Desktop">Desktop</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Reason
+              </label>
+              <textarea
+                value={formData.reason}
+                onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+                placeholder="e.g., Student got new phone"
+                rows={2}
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
                 disabled={loading}
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Device Type
-            </label>
-            <select
-              value={formData.device_type}
-              onChange={(e) => setFormData({ ...formData, device_type: e.target.value })}
-              className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all text-sm"
-              disabled={loading}
-            >
-              <option value="">Select device type</option>
-              <option value="Mobile">Mobile Phone</option>
-              <option value="Tablet">Tablet</option>
-              <option value="Laptop">Laptop</option>
-              <option value="Desktop">Desktop</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
-              Reason for Adding
-            </label>
-            <textarea
-              value={formData.reason}
-              onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-              placeholder="e.g., Student got a new phone"
-              rows={2}
-              className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all resize-none text-sm"
-              disabled={loading}
-            />
-          </div>
-
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-3 mt-6">
             <button
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 font-semibold rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 text-sm"
+              className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 px-4 py-2.5 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+              className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium disabled:opacity-50"
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 inline-block mr-2 animate-spin" />
                   Adding...
                 </>
               ) : (
                 <>
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-4 h-4 inline-block mr-2" />
                   Add Device
                 </>
               )}
