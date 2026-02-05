@@ -29,7 +29,8 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
     const isScanningRef = useRef<boolean>(false);
     const processingRef = useRef<boolean>(false);
     const selectedClassRef = useRef<string>('');
-    const lastScannedCodeRef = useRef<string>(''); // ✅ OPTIMIZATION: Prevent duplicate scans
+    const lastScannedCodeRef = useRef<string>('');
+    const lastScanTimeRef = useRef<number>(0);
 
     // Keep refs in sync
     useEffect(() => {
@@ -45,114 +46,59 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
         setProcessing(false);
     }, []);
 
-    // ✅ OPTIMIZED: Stable callback with duplicate prevention
+    // ✅ OPTIMIZED: Fast scan handler with throttling
     const onScanSuccess = useCallback(async (decodedText: string) => {
-        // ✅ OPTIMIZATION: Skip if processing or duplicate
+        const now = Date.now();
+        
+        // ✅ THROTTLE: Prevent multiple scans within 1 second
+        if (now - lastScanTimeRef.current < 1000) {
+            return;
+        }
+        
+        // ✅ DUPLICATE CHECK: Skip if same code scanned recently
         if (processingRef.current || isCleaningUpRef.current || decodedText === lastScannedCodeRef.current) {
             return;
         }
         
+        // ✅ IMMEDIATE LOCK: Prevent concurrent processing
         processingRef.current = true;
+        lastScanTimeRef.current = now;
+        lastScannedCodeRef.current = decodedText;
+        
+        // ✅ INSTANT UI FEEDBACK
         setProcessing(true);
-        lastScannedCodeRef.current = decodedText; // ✅ Remember this code
     
-        console.log('[STUDENT SCANNER] ='.repeat(30));
-        console.log('[STUDENT SCANNER] 🎯 QR Code Scanned (RAW):', decodedText);
+        console.log('[SCANNER] 🎯 QR Scanned:', decodedText.substring(0, 50) + '...');
     
         try {
             let qrData: { class_id: string; date: string; code: string };
     
-            // STEP 1: Parse QR Code
+            // STEP 1: Quick parse
             try {
                 qrData = JSON.parse(decodedText);
-                console.log('[STUDENT SCANNER] ✅ Step 1: Parsed QR data:', qrData);
-            } catch (parseError) {
-                console.error('[STUDENT SCANNER] ❌ Step 1 FAILED: Invalid JSON:', parseError);
-                setResult({
-                    success: false,
-                    message: 'Invalid QR code format',
-                });
-                setTimeout(() => {
-                    setResult(null);
-                    processingRef.current = false;
-                    setProcessing(false);
-                    lastScannedCodeRef.current = ''; // ✅ Reset for retry
-                }, 1500);
-                return;
+            } catch {
+                throw new Error('Invalid QR code format');
             }
     
-            // STEP 2: Validate Required Fields
+            // STEP 2: Quick validation
             if (!qrData.class_id || !qrData.date || !qrData.code) {
-                console.error('[STUDENT SCANNER] ❌ Step 2 FAILED: Missing fields:', {
-                    has_class_id: !!qrData.class_id,
-                    has_date: !!qrData.date,
-                    has_code: !!qrData.code
-                });
-                setResult({
-                    success: false,
-                    message: 'Invalid QR code - missing required data',
-                });
-                setTimeout(() => {
-                    setResult(null);
-                    processingRef.current = false;
-                    setProcessing(false);
-                    lastScannedCodeRef.current = ''; // ✅ Reset for retry
-                }, 1500);
-                return;
+                throw new Error('Invalid QR code - missing data');
             }
-            console.log('[STUDENT SCANNER] ✅ Step 2: All fields present');
     
-            // STEP 3: Validate Class Match
+            // STEP 3: Class match check
             if (qrData.class_id !== selectedClassRef.current) {
-                console.error('[STUDENT SCANNER] ❌ Step 3 FAILED: Class mismatch:', {
-                    qr_class_id: qrData.class_id,
-                    selected_class_id: selectedClassRef.current
-                });
-                setResult({
-                    success: false,
-                    message: 'This QR code is for a different class!',
-                });
-                setTimeout(() => {
-                    setResult(null);
-                    processingRef.current = false;
-                    setProcessing(false);
-                    lastScannedCodeRef.current = ''; // ✅ Reset for retry
-                }, 1500);
-                return;
+                throw new Error('This QR code is for a different class!');
             }
-            console.log('[STUDENT SCANNER] ✅ Step 3: Class match confirmed');
     
-            // STEP 4: Get Auth Token
-            const token = typeof window !== 'undefined'
-                ? localStorage.getItem('access_token')
-                : null;
-    
+            // STEP 4: Get token
+            const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
             if (!token) {
-                console.error('[STUDENT SCANNER] ❌ Step 4 FAILED: No token found');
-                setResult({
-                    success: false,
-                    message: 'Please login again.',
-                });
-                setTimeout(() => {
-                    setResult(null);
-                    processingRef.current = false;
-                    setProcessing(false);
-                    lastScannedCodeRef.current = ''; // ✅ Reset for retry
-                }, 1500);
-                return;
+                throw new Error('Please login again');
             }
-            console.log('[STUDENT SCANNER] ✅ Step 4: Token found');
     
-            // STEP 5: Send to Backend
-            console.log('[STUDENT SCANNER] 📤 Step 5: Sending to backend...');
+            // ✅ STEP 5: SINGLE FAST API CALL
+            console.log('[SCANNER] 📤 Sending to backend...');
             
-            const requestBody = {
-                class_id: qrData.class_id,
-                qr_code: decodedText  // Send the FULL raw QR string
-            };
-            
-            console.log('[STUDENT SCANNER] 📦 Request Body:', JSON.stringify(requestBody, null, 2));
-    
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_URL}/qr/scan`,
                 {
@@ -161,30 +107,28 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                         Authorization: `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(requestBody)
+                    body: JSON.stringify({
+                        class_id: qrData.class_id,
+                        qr_code: decodedText
+                    })
                 }
             );
     
-            console.log('[STUDENT SCANNER] 📥 Step 5: Response status:', response.status);
-    
             const data = await response.json();
-            console.log('[STUDENT SCANNER] 📥 Step 5: Response data:', JSON.stringify(data, null, 2));
     
             if (!response.ok) {
-                console.error('[STUDENT SCANNER] ❌ Step 5 FAILED: Backend error:', data);
                 throw new Error(data.detail || `Server error ${response.status}`);
             }
     
-            console.log('[STUDENT SCANNER] ✅ Step 5: Backend accepted request');
-            console.log('[STUDENT SCANNER] 🎉 SUCCESS! Attendance marked');
+            console.log('[SCANNER] ✅ Success!');
             
-            // Show success message
+            // ✅ INSTANT SUCCESS FEEDBACK
             setResult({ 
                 success: true, 
                 message: data.message || 'Attendance marked successfully!' 
             });
             
-            // Close after 1.5 seconds
+            // ✅ AUTO-CLOSE after 1.5s
             setTimeout(() => {
                 setScanning(false);
                 setProcessing(false);
@@ -192,26 +136,27 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
             }, 1500);
     
         } catch (error: any) {
-            console.error('[STUDENT SCANNER] ❌ FATAL ERROR:', error);
-            console.error('[STUDENT SCANNER] Error stack:', error.stack);
+            console.error('[SCANNER] ❌ Error:', error.message);
+            
+            // ✅ INSTANT ERROR FEEDBACK
             setResult({
                 success: false,
                 message: error.message || 'Failed to scan QR code',
             });
+            
+            // ✅ QUICK RETRY: Clear after 2s
             setTimeout(() => {
                 setResult(null);
                 processingRef.current = false;
                 setProcessing(false);
-                lastScannedCodeRef.current = ''; // ✅ Reset for retry
-            }, 1500);
-        } finally {
-            console.log('[STUDENT SCANNER] ='.repeat(30));
+                lastScannedCodeRef.current = '';
+            }, 2000);
         }
     }, [onClose]);
 
-    // ✅ OPTIMIZED: Silent failure callback (no spam)
+    // ✅ Silent error handler (no console spam)
     const onScanFailure = useCallback((_error: string) => {
-        // Ignore scan failures
+        // Intentionally empty - ignore scan failures
     }, []);
 
     useEffect(() => {
@@ -220,7 +165,6 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
             return;
         }
 
-        // Don't re-initialize if already scanning
         if (isScanningRef.current && html5QrRef.current) {
             return;
         }
@@ -236,7 +180,6 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 const elem = document.getElementById(regionId);
                 
                 if (!elem) {
-                    console.error('[SCANNER] Element not found');
                     throw new Error('Scanner element not found');
                 }
 
@@ -247,7 +190,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                         await html5QrRef.current.stop();
                         await html5QrRef.current.clear();
                     } catch (e) {
-                        console.warn('[SCANNER] Cleanup of existing instance failed:', e);
+                        console.warn('[SCANNER] Cleanup failed:', e);
                     }
                     html5QrRef.current = null;
                 }
@@ -256,7 +199,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
 
                 html5QrRef.current = new Html5Qrcode(regionId);
 
-                // ✅ OPTIMIZED CONFIG: Higher FPS for faster scanning
+                // ✅ OPTIMIZED: High FPS for fast scanning
                 const config = {
                     fps: 60,
                     qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
@@ -265,14 +208,12 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                         return { width: size, height: size };
                     },
                     aspectRatio: 1.0,
-                    disableFlip: false, // ✅ OPTIMIZATION: Enable flip for better detection
+                    disableFlip: false,
                 };
 
                 const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-                console.log('[SCANNER] Is mobile:', isMobile);
 
                 if (isMobile) {
-                    console.log('[SCANNER] Starting with mobile environment camera');
                     try {
                         await html5QrRef.current.start(
                             { facingMode: { exact: 'environment' } },
@@ -280,10 +221,8 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                             onScanSuccess,
                             onScanFailure
                         );
-                        console.log('[SCANNER] Mobile environment camera started successfully');
                         return;
-                    } catch (e) {
-                        console.warn('[SCANNER] Exact environment failed, trying ideal:', e);
+                    } catch {
                         try {
                             await html5QrRef.current.start(
                                 { facingMode: { ideal: 'environment' } },
@@ -291,29 +230,23 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                                 onScanSuccess,
                                 onScanFailure
                             );
-                            console.log('[SCANNER] Mobile ideal environment camera started');
                             return;
-                        } catch (e2) {
-                            console.warn('[SCANNER] Ideal environment failed, trying basic:', e2);
+                        } catch {
                             await html5QrRef.current.start(
                                 { facingMode: 'environment' },
                                 config,
                                 onScanSuccess,
                                 onScanFailure
                             );
-                            console.log('[SCANNER] Mobile basic environment camera started');
                             return;
                         }
                     }
                 }
 
-                console.log('[SCANNER] Desktop mode - getting cameras');
                 let cameras: Array<{ id: string; label: string }> = [];
                 try {
                     cameras = await Html5Qrcode.getCameras();
-                    console.log('[SCANNER] Found cameras:', cameras);
-                } catch (e) {
-                    console.warn('[SCANNER] getCameras failed:', e);
+                } catch {
                     cameras = [];
                 }
 
@@ -324,7 +257,6 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     });
 
                     const selectedCamera = backCamera || cameras[cameras.length - 1];
-                    console.log('[SCANNER] Selected camera:', selectedCamera);
 
                     try {
                         await html5QrRef.current.start(
@@ -333,14 +265,12 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                             onScanSuccess,
                             onScanFailure
                         );
-                        console.log('[SCANNER] Camera started successfully');
                         return;
-                    } catch (e) {
-                        console.warn('[SCANNER] camera ID failed:', e);
+                    } catch {
+                        // Continue to fallback
                     }
                 }
 
-                console.log('[SCANNER] Using fallback camera');
                 try {
                     await html5QrRef.current.start(
                         { facingMode: 'environment' },
@@ -349,8 +279,8 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                         onScanFailure
                     );
                     return;
-                } catch (e) {
-                    console.warn('[SCANNER] environment fallback failed:', e);
+                } catch {
+                    // Continue to final fallback
                 }
 
                 await html5QrRef.current.start(
@@ -361,11 +291,11 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 );
 
             } catch (err: any) {
-                console.error('[SCANNER] Initialization failed:', err);
+                console.error('[SCANNER] Init failed:', err);
                 if (isScanningRef.current) {
                     setResult({
                         success: false,
-                        message: 'Camera access denied. Please enable camera permissions in your browser settings.',
+                        message: 'Camera access denied. Please enable camera permissions.',
                     });
                     setScanning(false);
                 }
@@ -400,10 +330,11 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
             return;
         }
 
-        console.log('[STUDENT SCANNER] 🎬 Starting scanner for class:', selectedClass);
+        console.log('[SCANNER] 🎬 Starting scanner for class:', selectedClass);
         setResult(null);
         setProcessing(false);
-        lastScannedCodeRef.current = ''; // ✅ OPTIMIZATION: Reset duplicate check
+        lastScannedCodeRef.current = '';
+        lastScanTimeRef.current = 0;
         setScanning(true);
     };
 
@@ -544,6 +475,16 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                             <div className="w-full max-w-md mx-auto">
                                 <div className="relative aspect-square rounded-2xl overflow-hidden border border-slate-200 shadow-sm">
                                     <div id="qr-reader" className="absolute inset-0" />
+                                    
+                                    {/* ✅ LOADING OVERLAY while processing */}
+                                    {processing && !result && (
+                                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-10">
+                                            <div className="bg-white rounded-2xl p-6 shadow-2xl">
+                                                <div className="w-12 h-12 border-4 border-teal-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                                                <p className="text-sm font-semibold text-slate-900">Processing...</p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
