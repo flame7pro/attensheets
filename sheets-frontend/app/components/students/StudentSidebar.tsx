@@ -153,10 +153,10 @@ export const StudentSidebar: React.FC<StudentSidebarProps> = ({
             {onManageDevices && (
               <button
                 onClick={onManageDevices}
-                className="w-full flex items-center gap-3 px-4 py-3 mt-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all"
+                className="w-full flex items-center gap-3 px-4 py-2 mt-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all"
               >
                 <Smartphone className="w-5 h-5" />
-                <span className="font-medium">My Devices</span>
+                <span>My Devices</span>
               </button>
             )}
           </div>
