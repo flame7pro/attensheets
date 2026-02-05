@@ -250,12 +250,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {classes.length > 0 && (
               <button
                 onClick={onManageDevices}
-                className="w-full flex items-center gap-3 px-4 py-3 text-slate-700 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-teal-50 rounded-xl transition-all group hover:shadow-md"
+                className="w-full flex items-center gap-3 px-4 py-3 text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                <Smartphone className="w-5 h-5 text-emerald-600 group-hover:scale-110 transition-transform" />
-                {!collapsed && (
-                  <span className="font-medium group-hover:text-emerald-700">Manage Devices</span>
-                )}
+                <Smartphone className="w-5 h-5 text-slate-600" />
+                {!collapsed && <span className="font-medium">Manage Devices</span>}
               </button>
             )}
 
