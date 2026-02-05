@@ -10,6 +10,7 @@ interface QRAttendanceModalProps {
     totalStudents: number;
     currentDate: string; // YYYY-MM-DD format
     onClose: () => void;
+    onUpdateClassData?: (updatedClass: any) => void; // ✅ Add this
 }
 
 export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
@@ -18,6 +19,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
     totalStudents,
     currentDate,
     onClose,
+    onUpdateClassData, // ✅ Add this
 }) => {
     const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
     const [currentCode, setCurrentCode] = useState<string>('');
@@ -239,7 +241,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 setIsStopping(false);
                 return;
             }
-
+    
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_URL}/qr/stop-session`,
                 {
@@ -254,13 +256,36 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                     }),
                 }
             );
-
+    
             if (!response.ok) {
                 const text = await response.text();
                 throw new Error(text || 'Failed to stop QR session');
             }
-
+    
             const data = await response.json();
+            
+            // ✅ FIX: Fetch updated class data immediately
+            console.log('[QR_STOP] Fetching updated class data...');
+            const classResponse = await fetch(
+                `${process.env.NEXT_PUBLIC_API_URL}/classes/${classId}`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`
+                    }
+                }
+            );
+    
+            if (classResponse.ok) {
+                const classData = await classResponse.json();
+                
+                // ✅ Trigger parent component update (you need to add this prop)
+                // Add onUpdateClassData prop to QRAttendanceModalProps interface
+                if (onUpdateClassData) {
+                    onUpdateClassData(classData.class);
+                    console.log('[QR_STOP] ✅ Parent component updated with fresh data');
+                }
+            }
+            
             showNotification('success', `Session ${sessionNumber} completed! ${data.scanned_count} present, ${data.absent_count} absent.`);
             
             setTimeout(() => {
@@ -274,7 +299,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             setIsStopping(false);
         }
     };
-
+    
     return (
         <>
             {/* Main Modal */}
