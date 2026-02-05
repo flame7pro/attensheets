@@ -142,14 +142,22 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 setScannedCount(session.scanned_students?.length ?? 0);
                 setSessionNumber(session.session_number || 1);
 
-                // Use backend's time_remaining directly
-                if (session.time_remaining !== undefined) {
-                    setTimeLeft(session.time_remaining);
+                // Calculate time from backend's code_generated_at timestamp
+                const codeGeneratedAt = session.code_generated_at || session.last_rotation;
+                const serverInterval = Number(session.rotation_interval);
+                
+                if (codeGeneratedAt) {
+                    const now = new Date();
+                    const rotationTime = new Date(codeGeneratedAt);
+                    const elapsedMs = now.getTime() - rotationTime.getTime();
+                    const elapsedSec = Math.floor(elapsedMs / 1000);
+                    const remaining = Math.max(0, serverInterval - elapsedSec);
+                    setTimeLeft(remaining);
                 }
 
                 // Update QR code when it changes
                 if (serverCode !== currentCode) {
-                    setRotationInterval(Number(session.rotation_interval));
+                    setRotationInterval(serverInterval);
                     setCurrentCode(serverCode);
                     await generateQRCode(serverCode);
                 }
