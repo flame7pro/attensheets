@@ -176,7 +176,6 @@ export default function DashboardPage() {
     }
   };
   
-
   // Sync classes to backend
   const syncToBackend = async (classesToSync: Class[]) => {
     if (!user) return;
@@ -213,6 +212,24 @@ export default function DashboardPage() {
       // Backend will sync when connection is restored
     }
   };
+
+  // Listen for QR session completion
+  useEffect(() => {
+    const handleQRCompleted = async (event: CustomEvent) => {
+      const { classId: completedClassId } = event.detail;
+      
+      if (activeClassId === completedClassId) {
+        console.log('🔄 Refreshing after QR session...');
+        await refreshClassData(completedClassId);
+      }
+    };
+  
+    window.addEventListener('qr-session-completed', handleQRCompleted as EventListener);
+  
+    return () => {
+      window.removeEventListener('qr-session-completed', handleQRCompleted as EventListener);
+    };
+  }, [activeClassId]);
 
   const handleLogout = async () => {
     await logout();
