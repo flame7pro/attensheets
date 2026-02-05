@@ -31,9 +31,9 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         message: string;
     } | null>(null);
 
-    // Refs for timing - CRITICAL for preventing glitches
-    const lastRotationTime = useRef<number>(0);
-    const intervalDuration = useRef<number>(5);
+    // Refs for server-driven timing
+    const lastServerRotation = useRef<string>('');
+    const serverInterval = useRef<number>(5);
     const lastCodeRef = useRef<string>('');
     const isGeneratingQR = useRef<boolean>(false);
 
@@ -42,11 +42,8 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         setTimeout(() => setNotification(null), 5000);
     };
 
-    // ✅ USE CALLBACK to prevent recreation on every render
     const generateQRCode = useCallback(async (code: string) => {
-        // Prevent duplicate QR generation
         if (isGeneratingQR.current || code === lastCodeRef.current) {
-            console.log('[QR] Skipping duplicate QR generation');
             return;
         }
 
@@ -78,7 +75,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
     const startSession = async () => {
         console.log('[QR MODAL] Starting QR session for date:', currentDate);
-        console.log('[QR MODAL] 🎚️ User selected interval:', rotationInterval);
 
         try {
             const token = localStorage.getItem('access_token');
@@ -109,24 +105,18 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             }
 
             const data = await response.json();
-            console.log('[QR MODAL] ✅ Session started:', data.session);
-
             const session = data.session;
-            const interval = Number(session.rotation_interval ?? rotationInterval);
 
-            // ✅ Initialize timing references
-            lastRotationTime.current = Date.now();
-            intervalDuration.current = interval;
+            // Initialize with server data
+            lastServerRotation.current = session.last_rotation || session.started_at;
+            serverInterval.current = Number(session.rotation_interval);
             lastCodeRef.current = '';
 
-            console.log('[QR MODAL] ⏰ Timer initialized at:', interval + 's');
-
             setIsActive(true);
-            setRotationInterval(interval);
+            setRotationInterval(serverInterval.current);
             setCurrentCode(session.current_code);
             setScannedCount(session.scanned_students?.length ?? 0);
             setSessionNumber(session.session_number || 1);
-            setTimeLeft(interval);
 
             await generateQRCode(session.current_code);
             showNotification('success', `Session ${session.session_number} started!`);
@@ -137,22 +127,30 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         }
     };
 
-    // ✅ SEPARATE COUNTDOWN TIMER - Runs smoothly without interruption
+    // ✅ SERVER-DRIVEN TIMER - Calculates from server's last_rotation timestamp
     useEffect(() => {
-        if (!isActive) return;
+        if (!isActive || !lastServerRotation.current) return;
 
-        const countdownInterval = setInterval(() => {
-            const now = Date.now();
-            const elapsed = Math.floor((now - lastRotationTime.current) / 1000);
-            const remaining = intervalDuration.current - elapsed;
-            
-            setTimeLeft(remaining > 0 ? remaining : 0);
-        }, 100); // Update every 100ms for smooth countdown
+        const updateTimer = () => {
+            try {
+                const now = new Date();
+                const lastRotation = new Date(lastServerRotation.current);
+                const elapsed = Math.floor((now.getTime() - lastRotation.getTime()) / 1000);
+                const remaining = Math.max(0, serverInterval.current - elapsed);
+                
+                setTimeLeft(remaining);
+            } catch (e) {
+                console.error('[TIMER] Error:', e);
+            }
+        };
 
-        return () => clearInterval(countdownInterval);
-    }, [isActive]);
+        updateTimer(); // Initial update
+        const timerInterval = setInterval(updateTimer, 200); // Update every 200ms
 
-    // ✅ SEPARATE POLLING - Checks for new codes without affecting timer
+        return () => clearInterval(timerInterval);
+    }, [isActive, lastServerRotation.current, serverInterval.current]);
+
+    // ✅ POLLING - Syncs with server state
     useEffect(() => {
         if (!isActive) return;
 
@@ -172,40 +170,50 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
                 const session = data.session;
                 
-                // Update scanned count
+                // Update counts
                 setScannedCount(session.scanned_students?.length ?? 0);
                 setSessionNumber(session.session_number || 1);
 
                 const newCode = session.current_code;
-                const newInterval = Number(session.rotation_interval ?? intervalDuration.current);
-                
-                // ✅ ONLY update if code actually changed
-                if (newCode && newCode !== currentCode) {
-                    console.log('[QR] 🔄 Code changed:', currentCode, '→', newCode);
-                    
-                    // Reset timer for new code
-                    lastRotationTime.current = Date.now();
-                    intervalDuration.current = newInterval;
-                    
+                const newInterval = Number(session.rotation_interval);
+                const newLastRotation = session.last_rotation || session.code_generated_at;
+
+                // ✅ Update if code changed OR if we got a newer timestamp
+                if (newCode !== currentCode || newLastRotation !== lastServerRotation.current) {
+                    console.log('[QR] Server update:', {
+                        oldCode: currentCode,
+                        newCode,
+                        oldRotation: lastServerRotation.current,
+                        newRotation: newLastRotation
+                    });
+
+                    // Update server state
+                    lastServerRotation.current = newLastRotation;
+                    serverInterval.current = newInterval;
+
+                    // Update UI
                     setRotationInterval(newInterval);
-                    setCurrentCode(newCode);
-                    setTimeLeft(newInterval);
                     
-                    // Generate new QR code
-                    await generateQRCode(newCode);
+                    // Only update code and QR if code actually changed
+                    if (newCode !== currentCode) {
+                        setCurrentCode(newCode);
+                        await generateQRCode(newCode);
+                    }
                 }
             } catch (e) {
                 console.error('[QR] Poll error:', e);
             }
         };
 
-        // Poll every 1.5 seconds
-        const pollInterval = setInterval(pollSession, 1500);
+        // Initial poll
+        pollSession();
+        
+        // Poll every 1 second for smooth updates
+        const pollInterval = setInterval(pollSession, 1000);
 
         return () => clearInterval(pollInterval);
     }, [isActive, classId, currentDate, currentCode, generateQRCode]);
 
-    // ✅ ESC KEY HANDLER - Close zoom modal on ESC key press
     useEffect(() => {
         const handleEscKey = (event: KeyboardEvent) => {
             if (event.key === 'Escape' && isZoomed) {
@@ -255,7 +263,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             const data = await response.json();
             showNotification('success', `Session completed! ${data.scanned_count} present, ${data.absent_count} absent.`);
             
-            // Trigger refresh
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('qr-session-completed', {
                     detail: { classId, date: currentDate }
@@ -405,10 +412,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                                                 setTimeLeft(newInterval);
                                             }}
                                             className="flex-1 h-2 sm:h-2.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-                                            style={{
-                                                WebkitAppearance: 'none',
-                                                appearance: 'none'
-                                            }}
                                         />
                                         <div className="flex items-center gap-1.5 sm:gap-2 bg-white px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-lg border-2 border-emerald-500 flex-shrink-0 min-w-[60px] sm:min-w-[70px]">
                                             <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 flex-shrink-0" />
@@ -479,7 +482,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
                                 {/* QR Code Display with Zoom Button */}
                                 <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg sm:rounded-xl md:rounded-2xl p-3 sm:p-4 md:p-6 text-center border-2 border-emerald-200">
-                                    {/* QR Code Container with Zoom Button */}
                                     <div className="relative inline-block max-w-full">
                                         <div className="bg-white p-3 sm:p-4 md:p-6 rounded-lg sm:rounded-xl shadow-lg">
                                             {qrCodeUrl && (
@@ -491,7 +493,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                                             )}
                                         </div>
                                         
-                                        {/* Zoom Button - Top Right Corner Outside */}
                                         <button
                                             onClick={() => setIsZoomed(true)}
                                             className="absolute -top-2 -right-2 sm:-top-3 sm:-right-3 p-2 sm:p-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-full shadow-lg hover:shadow-xl transition-all min-w-[36px] min-h-[36px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center group"
@@ -549,15 +550,13 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 </div>
             </div>
 
-            {/* Zoomed QR Code Modal - FULL SCREEN EXACTLY LIKE DESIGN */}
+            {/* Zoomed QR Code Modal */}
             {isZoomed && qrCodeUrl && (
                 <div 
                     className="fixed inset-0 bg-gradient-to-br from-teal-800 via-emerald-800 to-teal-900 flex flex-col z-[60]"
                     onClick={() => setIsZoomed(false)}
                 >
-                    {/* Top Bar */}
                     <div className="flex items-center justify-between px-3 sm:px-4 md:px-6 py-3 sm:py-4 flex-shrink-0">
-                        {/* QR Code Active Indicator */}
                         <div className="flex items-center gap-1.5 sm:gap-2">
                             <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 bg-emerald-400 rounded-full animate-pulse"></div>
                             <span className="text-white font-semibold text-xs sm:text-sm md:text-base">
@@ -565,7 +564,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                             </span>
                         </div>
                         
-                        {/* Timer Badge - Moved to top bar */}
                         <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
                             <div className="bg-blue-600 text-white px-3 sm:px-4 md:px-5 py-1.5 sm:py-2 rounded-full shadow-lg">
                                 <div className="flex items-center gap-1.5 sm:gap-2">
@@ -575,7 +573,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                                 </div>
                             </div>
 
-                            {/* Close Button */}
                             <button
                                 onClick={() => setIsZoomed(false)}
                                 className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 md:px-4 py-1.5 sm:py-2 md:py-2.5 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-lg transition-all border border-white/20"
@@ -587,13 +584,10 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                         </div>
                     </div>
 
-                    {/* Main Content - Centered */}
                     <div 
                         className="flex-1 flex flex-col items-center justify-center px-3 sm:px-4 md:px-6 py-4 sm:py-6 overflow-y-auto"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        
-                        {/* QR Code Container - Reduced padding */}
                         <div className="bg-white rounded-xl sm:rounded-2xl md:rounded-3xl p-3 sm:p-4 md:p-5 lg:p-6 shadow-2xl max-w-full">
                             <img 
                                 src={qrCodeUrl} 
@@ -603,7 +597,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                         </div>
                     </div>
 
-                    {/* Bottom Hint */}
                     <div className="text-center pb-3 sm:pb-4 md:pb-5 lg:pb-6 flex-shrink-0">
                         <p className="text-[10px] sm:text-xs md:text-sm text-white/70">
                             Tap anywhere outside the QR code to close • Press ESC to exit
