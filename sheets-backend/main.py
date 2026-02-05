@@ -1812,74 +1812,91 @@ async def update_class(
 
 @app.put("/classes/{class_id}/multi-session-attendance")
 async def update_multi_session_attendance(
-    class_id: str,  # ✅ Changed to str
+    class_id: str,
     request: MultiSessionAttendanceUpdate,
-    email: str = Depends(verify_token)  # ✅ Get email from token
+    email: str = Depends(verify_token)
 ):
     try:
         print("\n" + "="*80)
-        print("[MULTI_SESSION] REQUEST RECEIVED")
+        print("[MULTI_SESSION_API] REQUEST RECEIVED")
         print(f"  Class ID: {class_id}")
         print(f"  Student ID: {request.student_id}")
         print(f"  Date: {request.date}")
-        print(f"  Raw sessions: {request.sessions}")
-        print("="*80 + "\n")
+        print(f"  Sessions: {[{**s.dict(), 'status': s.status} for s in request.sessions]}")
+        print("="*80)
         
-        # ✅ Get user from email
+        # Get user
         user = db.get_user_by_email(email)
         if not user:
+            print("[MULTI_SESSION_API] ❌ User not found")
             raise HTTPException(status_code=404, detail="User not found")
         
-        # ✅ Filter out sessions with null status
+        print(f"[MULTI_SESSION_API] User: {user['name']} ({user['id']})")
+        
+        # Filter valid sessions
         valid_sessions = [
             s for s in request.sessions 
             if s.status is not None and s.status in ['P', 'A', 'L']
         ]
         
-        print(f"[MULTI_SESSION] Valid sessions after filtering: {valid_sessions}")
+        print(f"[MULTI_SESSION_API] Valid sessions: {len(valid_sessions)}/{len(request.sessions)}")
         
-        if not valid_sessions:
-            raise HTTPException(
-                status_code=400,
-                detail="No valid sessions provided. At least one session must have P, A, or L status."
-            )
-        
-        # ✅ Get existing class data using MongoDB manager
+        # Get class
         class_data = db.get_class(user["id"], str(class_id))
         if not class_data:
+            print(f"[MULTI_SESSION_API] ❌ Class not found: {class_id}")
             raise HTTPException(status_code=404, detail="Class not found")
+        
+        print(f"[MULTI_SESSION_API] Class: {class_data.get('name')}")
+        print(f"[MULTI_SESSION_API] Mode: {class_data.get('enrollment_mode', 'manual_entry')}")
+        print(f"[MULTI_SESSION_API] Total students: {len(class_data.get('students', []))}")
         
         # Find student
         student_found = False
+        student_name = None
+        
+        # Convert request.student_id to string for comparison
+        target_student_id = str(request.student_id)
+        
         for student in class_data['students']:
-            if student['id'] == request.student_id:
+            # Convert student ID to string for comparison
+            if str(student['id']) == target_student_id:
                 student_found = True
+                student_name = student.get('name', 'Unknown')
                 
-                # Initialize attendance dict if needed
+                print(f"[MULTI_SESSION_API] ✅ Found student: {student_name} (ID: {student['id']})")
+                
+                # Initialize attendance
                 if 'attendance' not in student:
                     student['attendance'] = {}
                 
-                # ✅ Save sessions in NEW FORMAT
-                student['attendance'][request.date] = {
-                    'sessions': [
-                        {
-                            'id': s.id,
-                            'name': s.name,
-                            'status': s.status
-                        }
-                        for s in valid_sessions
-                    ],
-                    'updated_at': datetime.now(timezone.utc).isoformat()
-                }
+                # Save or clear attendance
+                if valid_sessions:
+                    student['attendance'][request.date] = {
+                        'sessions': [
+                            {
+                                'id': s.id,
+                                'name': s.name,
+                                'status': s.status
+                            }
+                            for s in valid_sessions
+                        ],
+                        'updated_at': datetime.now(timezone.utc).isoformat()
+                    }
+                    print(f"[MULTI_SESSION_API] ✅ Saved {len(valid_sessions)} sessions for {request.date}")
+                else:
+                    if request.date in student['attendance']:
+                        del student['attendance'][request.date]
+                        print(f"[MULTI_SESSION_API] ✅ Cleared attendance for {request.date}")
                 
-                print(f"[MULTI_SESSION] Updated attendance for student {request.student_id} on {request.date}")
-                print(f"[MULTI_SESSION] Saved data: {student['attendance'][request.date]}")
                 break
         
         if not student_found:
+            print(f"[MULTI_SESSION_API] ❌ Student not found with ID: {target_student_id}")
+            print(f"[MULTI_SESSION_API] Available student IDs: {[str(s['id']) for s in class_data['students'][:5]]}")
             raise HTTPException(
                 status_code=404,
-                detail=f"Student with ID {request.student_id} not found in class {class_id}"
+                detail=f"Student not found in class"
             )
         
         # Recalculate statistics
@@ -1892,7 +1909,6 @@ async def update_multi_session_attendance(
             if 'attendance' in student:
                 for date_key, attendance_data in student['attendance'].items():
                     if isinstance(attendance_data, dict) and 'sessions' in attendance_data:
-                        # NEW FORMAT
                         for session in attendance_data['sessions']:
                             total_sessions += 1
                             if session['status'] == 'P':
@@ -1902,7 +1918,6 @@ async def update_multi_session_attendance(
                             elif session['status'] == 'L':
                                 total_late += 1
                     elif isinstance(attendance_data, dict) and 'status' in attendance_data:
-                        # OLD FORMAT
                         count = attendance_data.get('count', 1)
                         total_sessions += count
                         if attendance_data['status'] == 'P':
@@ -1912,7 +1927,6 @@ async def update_multi_session_attendance(
                         elif attendance_data['status'] == 'L':
                             total_late += count
                     elif isinstance(attendance_data, str):
-                        # VERY OLD FORMAT
                         total_sessions += 1
                         if attendance_data == 'P':
                             total_present += 1
@@ -1932,28 +1946,31 @@ async def update_multi_session_attendance(
             'excellentCount': 0
         }
         
-        # ✅ Save to database using MongoDB manager
+        # Save to database
         class_data['updated_at'] = datetime.now(timezone.utc).isoformat()
         class_file = db.get_class_file(user["id"], str(class_id))
         db.write_json(class_file, class_data)
         
-        print(f"[MULTI_SESSION] ✅ Successfully saved multi-session attendance")
+        print(f"[MULTI_SESSION_API] ✅ Saved to database")
+        print(f"[MULTI_SESSION_API] Stats: {total_sessions} sessions, {avg_attendance:.1f}% avg")
+        print("="*80 + "\n")
         
         return {
             "success": True,
-            "message": "Multi-session attendance updated successfully",
+            "message": f"Attendance updated for {student_name}",
             "class": class_data
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[MULTI_SESSION] ❌ Error: {str(e)}")
+        print(f"[MULTI_SESSION_API] ❌ ERROR: {str(e)}")
         import traceback
         traceback.print_exc()
+        print("="*80 + "\n")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to update multi-session attendance: {str(e)}"
+            detail=f"Failed to update attendance: {str(e)}"
         )
         
 @app.delete("/classes/{class_id}")
@@ -2399,17 +2416,39 @@ async def scan_qr_code(
             student_record["attendance"] = {}
         
         current_value = student_record["attendance"].get(date)
-        
+                
         # Mark attendance
         if session_number == 1:
-            # First session - simple 'P'
-            student_record["attendance"][date] = "P"
-            print(f"[QR_SCAN] ✓ Marked as 'P' (first session)")
+            # Check if there's existing data
+            if current_value is None:
+                student_record["attendance"][date] = "P"
+                print(f"[QR_SCAN] ✓ Marked as 'P' (first session)")
+            else:
+                # Already has data - convert to sessions format
+                if isinstance(current_value, str):
+                    sessions = [{
+                        "id": "session_1",
+                        "name": "Session 1",
+                        "status": current_value  # Preserve manual entry
+                    }]
+                elif isinstance(current_value, dict) and "sessions" in current_value:
+                    sessions = current_value["sessions"]
+                else:
+                    sessions = [{
+                        "id": "session_1",
+                        "name": "Session 1",
+                        "status": "P"
+                    }]
+                
+                student_record["attendance"][date] = {
+                    "sessions": sessions,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }
+                print(f"[QR_SCAN] ✓ Preserved existing session 1")
             
         else:
-            # Multi-session handling
+            # Multi-session
             if isinstance(current_value, str) or current_value is None:
-                # Convert to sessions array
                 sessions = []
                 for i in range(1, session_number + 1):
                     status = (
@@ -2418,7 +2457,7 @@ async def scan_qr_code(
                     )
                     sessions.append({
                         "id": f"session_{i}",
-                        "name": f"QR Session {i}",
+                        "name": f"Session {i}",
                         "status": status
                     })
                 
@@ -2426,13 +2465,13 @@ async def scan_qr_code(
                     "sessions": sessions,
                     "updated_at": datetime.now(timezone.utc).isoformat()
                 }
-                print(f"[QR_SCAN] ✓ Created sessions array with {len(sessions)} sessions")
+                print(f"[QR_SCAN] ✓ Created {len(sessions)} sessions")
                 
             elif isinstance(current_value, dict) and "sessions" in current_value:
-                # Update existing sessions
                 sessions = current_value["sessions"]
                 session_found = False
                 
+                # Only update current session
                 for s in sessions:
                     if s["id"] == f"session_{session_number}":
                         s["status"] = "P"
@@ -2440,17 +2479,24 @@ async def scan_qr_code(
                         break
                 
                 if not session_found:
-                    sessions.append({
-                        "id": f"session_{session_number}",
-                        "name": f"QR Session {session_number}",
-                        "status": "P"
-                    })
+                    # Fill missing sessions
+                    existing_ids = {int(s["id"].split("_")[1]) for s in sessions}
+                    
+                    for i in range(1, session_number + 1):
+                        if i not in existing_ids:
+                            sessions.append({
+                                "id": f"session_{i}",
+                                "name": f"Session {i}",
+                                "status": "A" if i != session_number else "P"
+                            })
+                
+                sessions.sort(key=lambda x: int(x["id"].split("_")[1]))
                 
                 student_record["attendance"][date] = {
                     "sessions": sessions,
                     "updated_at": datetime.now(timezone.utc).isoformat()
                 }
-                print(f"[QR_SCAN] ✓ Updated session #{session_number} to 'P'")
+                print(f"[QR_SCAN] ✓ Updated session #{session_number} (preserved manual)")
         
         # Save to database
         students[student_index] = student_record
