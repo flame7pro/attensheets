@@ -108,17 +108,17 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
 
   const handleRightClick = (e: React.MouseEvent, studentId: number, day: number) => {
     e.preventDefault();
-
-    // ✅ FIX: Enable multi-session modal for ALL modes (including QR)
+  
+    // ✅ FIX: Enable multi-session modal for ALL modes (including manual and import)
     const student = activeClass.students.find(s => s.id === studentId);
     if (!student) return;
-
+  
     const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const dayData = student.attendance[dateKey];
-
+  
     // Parse current sessions
     let currentSessions: Array<{ id: string; name: string; status: 'P' | 'A' | 'L' | null }> = [];
-
+  
     if (dayData) {
       if (typeof dayData === 'object' && 'sessions' in dayData) {
         // New format with sessions array
@@ -142,7 +142,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         });
       }
     }
-
+  
     // Ensure we have at least 3 session slots
     while (currentSessions.length < 3) {
       currentSessions.push({
@@ -151,7 +151,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         status: null
       });
     }
-
+  
     setMultiSessionStudentName(student.name);
     setMultiSessionDate(dateKey);
     setMultiSessionCurrentData(currentSessions);
@@ -159,7 +159,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
     setSelectedStudent(studentId);
     setShowMultiSessionModal(true);
   };
-
+    
   const handleSaveMultiSession = async (sessions: Array<{ id: string; name: string; status: 'P' | 'A' | 'L' | null }>) => {
     if (selectedStudent === null || !multiSessionDate) return;
   
