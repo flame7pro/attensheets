@@ -120,93 +120,76 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
     // ✅ UNIFIED EFFECT - Handles both countdown and polling
     useEffect(() => {
         if (!isActive) return;
-
+    
         let animationFrameId: number;
         let pollIntervalId: NodeJS.Timeout;
-
-        // ✅ SMOOTH COUNTDOWN using requestAnimationFrame
+        let lastCodeUpdate = Date.now();
+    
         const updateCountdown = () => {
             if (!isActive) return;
-
+    
             const now = Date.now();
             const elapsed = Math.floor((now - clientStartTime.current) / 1000);
             const cyclePosition = elapsed % intervalDuration.current;
             const remaining = intervalDuration.current - cyclePosition;
             
-            // Ensure we never show 0 or negative
             setTimeLeft(remaining > 0 ? remaining : intervalDuration.current);
             
-            // Continue animation loop
             animationFrameId = requestAnimationFrame(updateCountdown);
         };
-
-        // ✅ BACKEND POLLING for updates
+    
         const pollSession = async () => {
             try {
                 const token = localStorage.getItem('access_token');
                 if (!token) return;
-
+    
                 const res = await fetch(
                     `${process.env.NEXT_PUBLIC_API_URL}/qr/session/${classId}?date=${currentDate}`,
-                    {
-                        headers: {
-                            Authorization: `Bearer ${token}`,
-                        },
-                    }
+                    { headers: { Authorization: `Bearer ${token}` } }
                 );
-
+    
                 if (!res.ok) return;
                 const data = await res.json();
                 if (!data.active || !data.session) return;
-
+    
                 const session = data.session;
                 
-                // Update stats (always safe)
                 setScannedCount(session.scanned_students?.length ?? 0);
                 setSessionNumber(session.session_number || 1);
-
+    
                 const newCode = session.current_code;
                 const newInterval = Number(session.rotation_interval ?? intervalDuration.current);
                 
-                // ✅ CRITICAL: Only reset timer when code actually changes
-                if (newCode && newCode !== currentCode) {
-                    console.log('[QR MODAL] 🔄 Code rotated to:', newCode);
+                const timeSinceLastUpdate = Date.now() - lastCodeUpdate;
+                
+                if (newCode && newCode !== currentCode && timeSinceLastUpdate > 1000) {
+                    console.log('[QR] Code rotated:', newCode);
                     
-                    // Reset timer from NOW
                     clientStartTime.current = Date.now();
                     intervalDuration.current = newInterval;
+                    lastCodeUpdate = Date.now();
                     
                     setRotationInterval(newInterval);
                     setCurrentCode(newCode);
-                    await generateQRCode(newCode);
+                    generateQRCode(newCode);
                     
-                    console.log('[QR MODAL] ⏰ Timer reset to:', newInterval + 's');
-                } else {
-                    // ✅ Interval changed but code didn't rotate yet
-                    if (newInterval !== intervalDuration.current) {
-                        console.log(`[QR MODAL] ⚙️ Interval updated: ${intervalDuration.current}s → ${newInterval}s`);
-                        intervalDuration.current = newInterval;
-                        setRotationInterval(newInterval);
-                        // DON'T reset clientStartTime - let current cycle finish
-                    }
+                    console.log('[QR] Timer reset:', newInterval + 's');
+                } else if (newInterval !== intervalDuration.current) {
+                    console.log('[QR] Interval updated:', newInterval + 's');
+                    intervalDuration.current = newInterval;
+                    setRotationInterval(newInterval);
                 }
-
-            } catch (e: unknown) {
-                console.error('[QR MODAL] Poll error', e);
+    
+            } catch (e) {
+                console.error('[QR] Poll error:', e);
             }
         };
-
-        // ✅ Start smooth countdown animation
+    
         animationFrameId = requestAnimationFrame(updateCountdown);
-
-        // ✅ Start polling (every 1 second)
-        pollIntervalId = setInterval(pollSession, 1000);
-
-        // ✅ Cleanup on unmount or when isActive changes
+        pollIntervalId = setInterval(pollSession, 2000);
+    
         return () => {
-            if (animationFrameId) {
-                cancelAnimationFrame(animationFrameId);
-            }
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
             clearInterval(pollIntervalId);
         };
     }, [isActive, classId, currentDate, currentCode]);
@@ -237,7 +220,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 setIsStopping(false);
                 return;
             }
-
+    
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_URL}/qr/stop-session`,
                 {
@@ -252,27 +235,32 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                     }),
                 }
             );
-
+    
             if (!response.ok) {
                 const text = await response.text();
-                throw new Error(text || 'Failed to stop QR session');
+                throw new Error(text || 'Failed to stop session');
             }
-
+    
             const data = await response.json();
-            showNotification('success', `Session ${sessionNumber} completed! ${data.scanned_count} present, ${data.absent_count} absent.`);
+            showNotification('success', `Session completed! ${data.scanned_count} present, ${data.absent_count} absent.`);
+            
+            // Trigger refresh
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('qr-session-completed', {
+                    detail: { classId, date: currentDate }
+                }));
+            }
             
             setTimeout(() => {
                 onClose();
             }, 2000);
-        } catch (err: unknown) {
-            console.error('Stop session error:', err);
-            const message = err instanceof Error ? err.message : 'Failed to stop session';
-            showNotification('error', message);
+        } catch (err) {
+            console.error('Stop error:', err);
+            showNotification('error', err instanceof Error ? err.message : 'Failed to stop session');
         } finally {
             setIsStopping(false);
         }
     };
-
     return (
         <>
             {/* Main Modal */}
