@@ -119,80 +119,84 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
     // ✅ UNIFIED EFFECT - Handles both countdown and polling
     useEffect(() => {
+      if (!isActive) return;
+    
+      let animationFrameId: number | undefined;
+      let pollIntervalId: NodeJS.Timeout | undefined;
+      let lastCodeUpdate = Date.now();
+    
+      const updateCountdown = () => {
         if (!isActive) return;
     
-        let animationFrameId: number;
-        let pollIntervalId: NodeJS.Timeout;
-        let lastCodeUpdate = Date.now();
-    
-        const updateCountdown = () => {
-            if (!isActive) return;
-    
-            const now = Date.now();
-            const elapsed = Math.floor((now - clientStartTime.current) / 1000);
-            const cyclePosition = elapsed % intervalDuration.current;
-            const remaining = intervalDuration.current - cyclePosition;
-            
-            setTimeLeft(remaining > 0 ? remaining : intervalDuration.current);
-            
-            animationFrameId = requestAnimationFrame(updateCountdown);
-        };
-    
-        const pollSession = async () => {
-            try {
-                const token = localStorage.getItem('access_token');
-                if (!token) return;
-    
-                const res = await fetch(
-                    `${process.env.NEXT_PUBLIC_API_URL}/qr/session/${classId}?date=${currentDate}`,
-                    { headers: { Authorization: `Bearer ${token}` } }
-                );
-    
-                if (!res.ok) return;
-                const data = await res.json();
-                if (!data.active || !data.session) return;
-    
-                const session = data.session;
-                
-                setScannedCount(session.scanned_students?.length ?? 0);
-                setSessionNumber(session.session_number || 1);
-    
-                const newCode = session.current_code;
-                const newInterval = Number(session.rotation_interval ?? intervalDuration.current);
-                
-                const timeSinceLastUpdate = Date.now() - lastCodeUpdate;
-                
-                if (newCode && newCode !== currentCode && timeSinceLastUpdate > 1000) {
-                    console.log('[QR] Code rotated:', newCode);
-                    
-                    clientStartTime.current = Date.now();
-                    intervalDuration.current = newInterval;
-                    lastCodeUpdate = Date.now();
-                    
-                    setRotationInterval(newInterval);
-                    setCurrentCode(newCode);
-                    generateQRCode(newCode);
-                    
-                    console.log('[QR] Timer reset:', newInterval + 's');
-                } else if (newInterval !== intervalDuration.current) {
-                    console.log('[QR] Interval updated:', newInterval + 's');
-                    intervalDuration.current = newInterval;
-                    setRotationInterval(newInterval);
-                }
-    
-            } catch (e) {
-                console.error('[QR] Poll error:', e);
-            }
-        };
-    
+        const now = Date.now();
+        const elapsed = Math.floor((now - clientStartTime.current) / 1000);
+        const cyclePosition = elapsed % intervalDuration.current;
+        const remaining = intervalDuration.current - cyclePosition;
+        
+        setTimeLeft(remaining > 0 ? remaining : intervalDuration.current);
+        
         animationFrameId = requestAnimationFrame(updateCountdown);
-        pollIntervalId = setInterval(pollSession, 2000);
+      };
     
-        return () => {
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
-            clearInterval(pollIntervalId);
-        };
-    }, [isActive, classId, currentDate, currentCode]);
+      const pollSession = async () => {
+        try {
+          const token = localStorage.getItem('access_token');
+          if (!token) return;
+    
+          const res = await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/qr/session/${classId}?date=${currentDate}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+    
+          if (!res.ok) return;
+          const data = await res.json();
+          if (!data.active || !data.session) return;
+    
+          const session = data.session;
+          
+          setScannedCount(session.scanned_students?.length ?? 0);
+          setSessionNumber(session.session_number || 1);
+    
+          const newCode = session.current_code;
+          const newInterval = Number(session.rotation_interval ?? intervalDuration.current);
+          
+          const timeSinceLastUpdate = Date.now() - lastCodeUpdate;
+          
+          if (newCode && newCode !== currentCode && timeSinceLastUpdate > 1000) {
+            console.log('[QR] Code rotated:', newCode);
+            
+            clientStartTime.current = Date.now();
+            intervalDuration.current = newInterval;
+            lastCodeUpdate = Date.now();
+            
+            setRotationInterval(newInterval);
+            setCurrentCode(newCode);
+            generateQRCode(newCode);
+            
+            console.log('[QR] Timer reset:', newInterval + 's');
+          } else if (newInterval !== intervalDuration.current) {
+            console.log('[QR] Interval updated:', newInterval + 's');
+            intervalDuration.current = newInterval;
+            setRotationInterval(newInterval);
+          }
+    
+        } catch (e) {
+          console.error('[QR] Poll error:', e);
+        }
+      };
+    
+      animationFrameId = requestAnimationFrame(updateCountdown);
+      pollIntervalId = setInterval(pollSession, 2000);
+    
+      return () => {
+        if (animationFrameId !== undefined) {
+          cancelAnimationFrame(animationFrameId);
+        }
+        if (pollIntervalId !== undefined) {
+          clearInterval(pollIntervalId);
+        }
+      };
+    }, [isActive, classId, currentDate, currentCode, generateQRCode]);
 
     // ✅ ESC KEY HANDLER - Close zoom modal on ESC key press
     useEffect(() => {
@@ -212,55 +216,56 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
     }, [isZoomed]);
 
     const stopSession = async () => {
-        setIsStopping(true);
-        try {
-            const token = localStorage.getItem('access_token');
-            if (!token) {
-                showNotification('error', 'Please login again');
-                setIsStopping(false);
-                return;
-            }
-    
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/qr/stop-session`,
-                {
-                    method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        class_id: classId,
-                        date: currentDate
-                    }),
-                }
-            );
-    
-            if (!response.ok) {
-                const text = await response.text();
-                throw new Error(text || 'Failed to stop session');
-            }
-    
-            const data = await response.json();
-            showNotification('success', `Session completed! ${data.scanned_count} present, ${data.absent_count} absent.`);
-            
-            // Trigger refresh
-            if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('qr-session-completed', {
-                    detail: { classId, date: currentDate }
-                }));
-            }
-            
-            setTimeout(() => {
-                onClose();
-            }, 2000);
-        } catch (err) {
-            console.error('Stop error:', err);
-            showNotification('error', err instanceof Error ? err.message : 'Failed to stop session');
-        } finally {
-            setIsStopping(false);
+      setIsStopping(true);
+      try {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+          showNotification('error', 'Please login again');
+          setIsStopping(false);
+          return;
         }
+    
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/qr/stop-session`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              class_id: classId,
+              date: currentDate
+            }),
+          }
+        );
+    
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || 'Failed to stop session');
+        }
+    
+        const data = await response.json();
+        showNotification('success', `Session completed! ${data.scanned_count} present, ${data.absent_count} absent.`);
+        
+        // Trigger refresh
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('qr-session-completed', {
+            detail: { classId, date: currentDate }
+          }));
+        }
+        
+        setTimeout(() => {
+          onClose();
+        }, 2000);
+      } catch (err) {
+        console.error('Stop error:', err);
+        showNotification('error', err instanceof Error ? err.message : 'Failed to stop session');
+      } finally {
+        setIsStopping(false);
+      }
     };
+
     return (
         <>
             {/* Main Modal */}
