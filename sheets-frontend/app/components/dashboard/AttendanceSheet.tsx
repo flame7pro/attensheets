@@ -107,37 +107,40 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
 
   const handleRightClick = (e: React.MouseEvent, studentId: number, day: number) => {
     e.preventDefault();
-
+  
     const student = activeClass.students.find(s => s.id === studentId);
     if (!student) return;
-
+  
     const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const dayData = student.attendance[dateKey];
-
+  
     console.log('[RIGHT_CLICK] Student:', student.name);
     console.log('[RIGHT_CLICK] Date:', dateKey);
     console.log('[RIGHT_CLICK] Current data:', dayData);
-
-    // Parse current sessions
+  
+    // Parse current sessions with proper typing
     let currentSessions: Array<{ id: string; name: string; status: 'P' | 'A' | 'L' | null }> = [];
-
+  
     if (dayData) {
-      if (typeof dayData === 'object' && 'sessions' in dayData) {
+      if (typeof dayData === 'object' && dayData !== null && 'sessions' in dayData) {
         // NEW FORMAT: sessions array
         console.log('[RIGHT_CLICK] Format: sessions array');
-        currentSessions = dayData.sessions.map(s => ({ 
-          ...s, 
+        const sessionsData = dayData as { sessions: Array<{ id: string; name: string; status: 'P' | 'A' | 'L' }> };
+        currentSessions = sessionsData.sessions.map(s => ({ 
+          id: s.id,
+          name: s.name,
           status: s.status as 'P' | 'A' | 'L' | null 
         }));
-      } else if (typeof dayData === 'object' && 'status' in dayData) {
+      } else if (typeof dayData === 'object' && dayData !== null && 'status' in dayData) {
         // OLD FORMAT: { status: 'P', count: 2 }
         console.log('[RIGHT_CLICK] Format: status+count');
-        const count = dayData.count || 1;
+        const oldFormat = dayData as { status: 'P' | 'A' | 'L'; count?: number };
+        const count = oldFormat.count || 1;
         for (let i = 0; i < count; i++) {
           currentSessions.push({
             id: `session_${i + 1}`,
             name: `Session ${i + 1}`,
-            status: dayData.status as 'P' | 'A' | 'L'
+            status: oldFormat.status
           });
         }
       } else if (typeof dayData === 'string') {
@@ -150,7 +153,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         });
       }
     }
-
+  
     // Ensure at least 3 session slots
     while (currentSessions.length < 3) {
       currentSessions.push({
@@ -159,9 +162,9 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         status: null
       });
     }
-
+  
     console.log('[RIGHT_CLICK] Opening modal with sessions:', currentSessions);
-
+  
     setMultiSessionStudentName(student.name);
     setMultiSessionDate(dateKey);
     setMultiSessionCurrentData(currentSessions);
@@ -236,58 +239,60 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       const result = await response.json();
       console.log('[MULTI_SESSION] ✅ Success:', result);
   
-      // Update local state
-      const validSessions = sessions.filter(s => s.status !== null);
+      // Update local state with proper typing
+      const validSessions = sessions.filter(s => s.status !== null) as Array<{ 
+        id: string; 
+        name: string; 
+        status: 'P' | 'A' | 'L' 
+      }>;
       
-      const updatedClass: Class = {
+      const updatedClass: typeof activeClass = {
         ...activeClass,
         students: activeClass.students.map(student => {
           if (student.id === selectedStudent) {
             const newAttendanceValue = validSessions.length > 0 
               ? {
-                  sessions: validSessions.map(s => ({
-                    id: s.id,
-                    name: s.name,
-                    status: s.status as 'P' | 'A' | 'L'
-                  })),
+                  sessions: validSessions,
                   updated_at: new Date().toISOString()
                 }
               : undefined;
-
+  
             return {
               ...student,
               attendance: {
                 ...student.attendance,
-                [multiSessionDate]: newAttendanceValue
+                ...(newAttendanceValue ? { [multiSessionDate]: newAttendanceValue } : {})
               }
             };
           }
           return student;
         })
       };
-
+  
       // Recalculate stats
       let totalPresent = 0;
       let totalAbsent = 0;
       let totalLate = 0;
       let total = 0;
-
+  
       updatedClass.students.forEach(student => {
         Object.values(student.attendance).forEach(dayData => {
           if (dayData) {
             if (typeof dayData === 'object' && 'sessions' in dayData) {
-              dayData.sessions.forEach((session: any) => {
+              const sessionsData = dayData as { sessions: Array<{ status: 'P' | 'A' | 'L' }> };
+              sessionsData.sessions.forEach((session) => {
                 total++;
                 if (session.status === 'P') totalPresent++;
                 else if (session.status === 'A') totalAbsent++;
                 else if (session.status === 'L') totalLate++;
               });
             } else if (typeof dayData === 'object' && 'status' in dayData) {
-              const count = dayData.count || 1;
+              const oldFormat = dayData as { status: 'P' | 'A' | 'L'; count?: number };
+              const count = oldFormat.count || 1;
               total += count;
-              if (dayData.status === 'P') totalPresent += count;
-              else if (dayData.status === 'A') totalAbsent += count;
-              else if (dayData.status === 'L') totalLate += count;
+              if (oldFormat.status === 'P') totalPresent += count;
+              else if (oldFormat.status === 'A') totalAbsent += count;
+              else if (oldFormat.status === 'L') totalLate += count;
             } else if (typeof dayData === 'string') {
               total++;
               if (dayData === 'P') totalPresent++;
@@ -297,32 +302,33 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
           }
         });
       });
-
+  
       const avgAttendance = total > 0 ? ((totalPresent + totalLate) / total * 100) : 0;
-
+  
       updatedClass.statistics = {
         totalStudents: updatedClass.students.length,
         avgAttendance: parseFloat(avgAttendance.toFixed(3)),
         atRiskCount: 0,
         excellentCount: 0
       };
-
+  
       onUpdateClassData(updatedClass);
       
       console.log('[MULTI_SESSION] ✅ Local state updated');
       console.log('[MULTI_SESSION] ═══════════════════════════════════\n');
-
+  
       // Close modal
       setShowMultiSessionModal(false);
       setSelectedDay(null);
       setSelectedStudent(null);
-
+  
     } catch (error) {
       console.error('[MULTI_SESSION] ❌ FAILED:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       alert(`Failed to save attendance:\n\n${errorMessage}\n\nPlease try again.`);
     }
   };
+
     
   const handleCloseMultiSession = () => {
     setShowMultiSessionModal(false);
