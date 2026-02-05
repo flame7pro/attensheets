@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Plus, X, BarChart3, Settings, FileText, Users, LayoutDashboard, LogOut, Edit2, Check, GraduationCap } from 'lucide-react';
+import { Plus, X, BarChart3, Settings, FileText, Users, LayoutDashboard, LogOut, Edit2, Check, GraduationCap, Smartphone } from 'lucide-react';
 import { Class, Student, CustomColumn } from '@/types';
 
 interface SidebarProps {
