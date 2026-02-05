@@ -258,7 +258,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
 
                 // ✅ OPTIMIZED CONFIG: Higher FPS for faster scanning
                 const config = {
-                    fps: 30, // ✅ OPTIMIZATION: Increased from 10 to 30 for 3x faster scanning
+                    fps: 60,
                     qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
                         const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
                         const size = Math.max(220, Math.min(360, Math.floor(minEdge * 0.78)));
