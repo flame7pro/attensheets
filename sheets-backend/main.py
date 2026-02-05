@@ -211,12 +211,7 @@ class MultiSessionAttendanceUpdate(BaseModel):
 def get_current_session_number_for_date(class_data: dict, date: str) -> int:
     """
     Calculate what the next session number should be based on existing attendance.
-    
-    Logic:
-    - Look at all students' attendance for this date
-    - Find the maximum number of sessions already marked
-    - Return max_sessions + 1
-    - If no sessions exist, return 1
+    FIXED: Now respects manually entered sessions.
     """
     max_sessions = 0
     
@@ -234,7 +229,7 @@ def get_current_session_number_for_date(class_data: dict, date: str) -> int:
         
         if isinstance(day_data, dict) and "sessions" in day_data:
             # NEW FORMAT: { sessions: [...], updated_at: "..." }
-            session_count = len([s for s in day_data["sessions"] if s.get("status")])
+            session_count = len(day_data["sessions"])
         elif isinstance(day_data, dict) and "status" in day_data:
             # OLD FORMAT: { status: 'P', count: 2 }
             session_count = day_data.get("count", 1)
@@ -245,7 +240,7 @@ def get_current_session_number_for_date(class_data: dict, date: str) -> int:
         # Track the maximum
         max_sessions = max(max_sessions, session_count)
     
-    # Next session number is max + 1 (or 1 if no sessions exist)
+    # Next session number is max + 1 (respects manual entries)
     return max_sessions + 1
 
 def get_password_hash(password: str) -> str:
@@ -2497,7 +2492,7 @@ async def scan_qr_code(
                     "updated_at": datetime.now(timezone.utc).isoformat()
                 }
                 print(f"[QR_SCAN] ✓ Updated session #{session_number} (preserved manual)")
-        
+
         # Save to database
         students[student_index] = student_record
         class_data["students"] = students
