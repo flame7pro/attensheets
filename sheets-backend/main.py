@@ -2167,7 +2167,10 @@ async def start_qr_session(request: dict, email: str = Depends(verify_token)):
     if not class_id or not date:
         raise HTTPException(status_code=400, detail="class_id and date are required")
     
-    print(f"[API] QR start request: class_id={class_id}, date={date}")
+    print(f"\n[QR_START] ═══════════════════════════════════")
+    print(f"[QR_START] Starting QR session")
+    print(f"[QR_START] Class: {class_id}, Date: {date}")
+    print(f"[QR_START] Interval: {rotation_interval}s")
     
     user = db.get_user_by_email(email)
     if not user:
@@ -2179,45 +2182,50 @@ async def start_qr_session(request: dict, email: str = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="Class not found")
     
     try:
-        # ✅ Calculate session number using helper function
+        # Calculate session number
         session_number = get_current_session_number_for_date(class_data, date)
-        print(f"[API] Calculated session number: {session_number}")
+        print(f"[QR_START] Session number: {session_number}")
         
-        # ✅ Generate QR code
+        # Generate QR code
         import random
         import string
         code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+        print(f"[QR_START] Generated code: {code}")
         
-        # ✅ Create session data with proper timestamps
-        now_iso = datetime.now(timezone.utc).isoformat()
+        # ✅ CRITICAL FIX: Use consistent timestamp format
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
         
+        # Create session data
         session_data = {
             "class_id": class_id,
             "teacher_id": user["id"],
             "date": date,
             "current_code": code,
-            "rotation_interval": rotation_interval,
+            "rotation_interval": int(rotation_interval),  # Ensure integer
             "session_number": session_number,
             "scanned_students": [],
             "started_at": now_iso,
             "last_rotation": now_iso,
-            "code_generated_at": now_iso  # ✅ NEW: Track when code was generated
+            "code_generated_at": now_iso  # ✅ This is the key field for rotation
         }
         
-        # ✅ Store in active sessions
+        # Store in active sessions
         session_key = f"{class_id}_{date}"
         if not hasattr(db, 'active_qr_sessions'):
             db.active_qr_sessions = {}
         db.active_qr_sessions[session_key] = session_data
         
-        print(f"[API] ✅ QR session started (Session #{session_number})")
+        print(f"[QR_START] ✅ Session started successfully")
+        print(f"[QR_START] ═══════════════════════════════════\n")
         
         return {"success": True, "session": session_data}
         
     except ValueError as e:
+        print(f"[QR_START] ❌ ValueError: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"[API] Error starting QR session: {e}")
+        print(f"[QR_START] ❌ Error: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to start QR session: {str(e)}")
@@ -2237,40 +2245,49 @@ def rotate_qr_code_if_needed(session: Dict[str, Any]) -> Dict[str, Any]:
     last_rotation = session.get("code_generated_at") or session.get("last_rotation") or session.get("started_at")
     
     if not last_rotation:
+        print("[ROTATE] ⚠️ No timestamp found, skipping rotation")
         return session
     
     # Parse ISO timestamp
     try:
         if isinstance(last_rotation, str):
-            # Remove 'Z' suffix if present
-            if last_rotation.endswith('Z'):
-                last_rotation = last_rotation[:-1]
-            last_rotation_dt = datetime.fromisoformat(last_rotation)
+            # Handle both formats: with and without 'Z' suffix
+            last_rotation_clean = last_rotation.replace('Z', '').replace('+00:00', '')
+            last_rotation_dt = datetime.fromisoformat(last_rotation_clean)
+            # Ensure timezone aware
+            if last_rotation_dt.tzinfo is None:
+                last_rotation_dt = last_rotation_dt.replace(tzinfo=timezone.utc)
         else:
             last_rotation_dt = last_rotation
+            if last_rotation_dt.tzinfo is None:
+                last_rotation_dt = last_rotation_dt.replace(tzinfo=timezone.utc)
     except Exception as e:
-        print(f"[ROTATE] Error parsing timestamp: {e}")
+        print(f"[ROTATE] ❌ Error parsing timestamp: {e}, value: {last_rotation}")
         return session
     
     # Calculate elapsed time
     now = datetime.now(timezone.utc)
     elapsed_seconds = (now - last_rotation_dt).total_seconds()
     
-    print(f"[ROTATE] Elapsed: {elapsed_seconds}s, Interval: {rotation_interval}s")
+    print(f"[ROTATE] Checking: elapsed={elapsed_seconds:.1f}s, interval={rotation_interval}s")
     
-    # Rotate if needed
-    if elapsed_seconds >= rotation_interval:
+    # ✅ CRITICAL FIX: Add buffer to prevent premature rotation
+    # Only rotate if we're past the interval by at least 0.5 seconds
+    if elapsed_seconds >= (rotation_interval - 0.5):
         new_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
         now_iso = now.isoformat()
         
+        # Update all timestamp fields
         session["current_code"] = new_code
         session["last_rotation"] = now_iso
         session["code_generated_at"] = now_iso
         
-        print(f"[ROTATE] ✅ Code rotated to: {new_code}")
-    
-    return session
-    
+        print(f"[ROTATE] ✅ Code rotated to: {new_code} (after {elapsed_seconds:.1f}s)")
+        return session
+    else:
+        print(f"[ROTATE] ⏳ Not yet, need {rotation_interval - elapsed_seconds:.1f}s more")
+        return session
+
 @app.get("/qr/session/{class_id}")
 async def get_qr_session(class_id: str, date: str, email: str = Depends(verify_token)):
     """Get active QR session with auto-rotation"""
@@ -2289,14 +2306,22 @@ async def get_qr_session(class_id: str, date: str, email: str = Depends(verify_t
     if not session or session["teacher_id"] != user["id"]:
         return {"active": False}
     
-    # ✅ AUTO-ROTATE CODE IF NEEDED
-    session = rotate_qr_code_if_needed(session)
+    # ✅ CRITICAL: Always check and rotate if needed
+    print(f"\n[QR_SESSION] Polling session {session_key}")
+    print(f"[QR_SESSION] Current code: {session.get('current_code')}")
+    print(f"[QR_SESSION] Last rotation: {session.get('code_generated_at')}")
     
-    # Update in memory
-    db.active_qr_sessions[session_key] = session
+    # Rotate if needed
+    updated_session = rotate_qr_code_if_needed(session)
     
-    return {"active": True, "session": session}
-
+    # ✅ CRITICAL: Update in memory storage
+    db.active_qr_sessions[session_key] = updated_session
+    
+    print(f"[QR_SESSION] After rotation check: {updated_session.get('current_code')}")
+    print(f"[QR_SESSION] Response ready\n")
+    
+    return {"active": True, "session": updated_session}
+    
 @app.post("/qr/scan")
 async def scan_qr_code(
     request: QRScanRequest,
@@ -2660,6 +2685,55 @@ async def stop_qr_session(payload: dict, email: str = Depends(verify_token)):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to stop session: {str(e)}")
+
+@app.get("/qr/debug/{class_id}")
+async def debug_qr_session(class_id: str, date: str, email: str = Depends(verify_token)):
+    """Debug endpoint to see raw session data"""
+    user = db.get_user_by_email(email)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    session_key = f"{class_id}_{date}"
+    
+    if not hasattr(db, 'active_qr_sessions'):
+        return {"error": "No active sessions"}
+    
+    session = db.active_qr_sessions.get(session_key)
+    
+    if not session:
+        return {"error": "Session not found", "session_key": session_key}
+    
+    # Calculate time info
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    last_rotation = session.get("code_generated_at") or session.get("last_rotation")
+    
+    if last_rotation:
+        try:
+            last_rotation_clean = str(last_rotation).replace('Z', '').replace('+00:00', '')
+            last_rotation_dt = datetime.fromisoformat(last_rotation_clean)
+            if last_rotation_dt.tzinfo is None:
+                last_rotation_dt = last_rotation_dt.replace(tzinfo=timezone.utc)
+            elapsed = (now - last_rotation_dt).total_seconds()
+        except:
+            elapsed = -1
+    else:
+        elapsed = -1
+    
+    return {
+        "session_key": session_key,
+        "current_code": session.get("current_code"),
+        "rotation_interval": session.get("rotation_interval"),
+        "session_number": session.get("session_number"),
+        "started_at": session.get("started_at"),
+        "last_rotation": session.get("last_rotation"),
+        "code_generated_at": session.get("code_generated_at"),
+        "elapsed_seconds": round(elapsed, 2) if elapsed >= 0 else "N/A",
+        "time_until_next": round(session.get("rotation_interval", 5) - elapsed, 2) if elapsed >= 0 else "N/A",
+        "scanned_count": len(session.get("scanned_students", [])),
+        "now_utc": now.isoformat()
+    }
+
 
 if __name__ == "__main__":
     import uvicorn
