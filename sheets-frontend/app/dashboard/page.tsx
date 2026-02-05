@@ -19,7 +19,6 @@ import { ImportDataState } from '../components/dashboard/ImportDataState';
 import { MonthYearSelector } from '../components/dashboard/MonthYearSelector';
 import { AttendanceThresholds, Student, CustomColumn, Class } from '@/types';
 import { QRAttendanceModal } from '../components/QRAttendanceModal';
-import { StudentDeviceManager } from '../components/StudentDeviceManager';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -36,15 +35,6 @@ export default function DashboardPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState('');
   const [showQRModal, setShowQRModal] = useState(false);
-  
-  // Device management states
-  const [showDeviceManager, setShowDeviceManager] = useState(false);
-  const [showStudentSelector, setShowStudentSelector] = useState(false);
-  const [selectedStudentForDevices, setSelectedStudentForDevices] = useState<{
-    email: string;
-    name: string;
-  } | null>(null);
-
   const getTodayDate = () => {
     const today = new Date();
     const year = today.getFullYear();
@@ -52,7 +42,6 @@ export default function DashboardPage() {
     const day = String(today.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
-
   const [defaultThresholds, setDefaultThresholds] = useState<AttendanceThresholds>({
     excellent: 95,
     good: 90,
@@ -70,7 +59,7 @@ export default function DashboardPage() {
   const [newColumnLabel, setNewColumnLabel] = useState('');
   const [newColumnType, setNewColumnType] = useState<'text' | 'number' | 'select'>('text');
 
-  // Refresh class data helper
+  // Add this helper function in page.tsx
   const refreshClassData = async (classId: number) => {
     try {
       const token = localStorage.getItem('access_token');
@@ -87,6 +76,8 @@ export default function DashboardPage() {
 
       if (response.ok) {
         const data = await response.json();
+
+        // Update only this specific class in the classes array
         setClasses(prevClasses =>
           prevClasses.map(cls =>
             cls.id === classId ? data.class : cls
@@ -147,22 +138,22 @@ export default function DashboardPage() {
   }, [defaultThresholds, user]);
 
   useEffect(() => {
-    const handleQRCompleted = async (event: Event) => {
-      const customEvent = event as CustomEvent<{ classId: number; date: string }>;
-      const { classId: completedClassId } = customEvent.detail;
-      
-      if (activeClassId === completedClassId) {
-        console.log('🔄 Refreshing after QR session...');
-        await refreshClassData(completedClassId);
-      }
-    };
+  const handleQRCompleted = async (event: Event) => {
+    const customEvent = event as CustomEvent<{ classId: number; date: string }>;
+    const { classId: completedClassId } = customEvent.detail;
+    
+    if (activeClassId === completedClassId) {
+      console.log('🔄 Refreshing after QR session...');
+      await refreshClassData(completedClassId);
+    }
+  };
 
-    window.addEventListener('qr-session-completed', handleQRCompleted);
+  window.addEventListener('qr-session-completed', handleQRCompleted);
 
-    return () => {
-      window.removeEventListener('qr-session-completed', handleQRCompleted);
-    };
-  }, [activeClassId]);
+  return () => {
+    window.removeEventListener('qr-session-completed', handleQRCompleted);
+  };
+}, [activeClassId, refreshClassData]);
 
   // Load classes from backend
   const loadClassesFromBackend = async () => {
@@ -176,11 +167,13 @@ export default function DashboardPage() {
         setClasses(backendClasses);
         setShowSnapshot(true);
       } else {
+        // Try loading from localStorage as fallback
         const localClasses = localStorage.getItem(`classes_${user?.id}`);
         if (localClasses) {
           const parsed: Class[] = JSON.parse(localClasses);
           setClasses(parsed);
 
+          // Sync local classes to backend
           if (parsed.length > 0) {
             await syncToBackend(parsed);
           }
@@ -190,6 +183,7 @@ export default function DashboardPage() {
       console.error('Error loading classes:', error);
       setSyncError('Failed to sync with server. Working offline.');
 
+      // Load from localStorage as fallback
       const localClasses = localStorage.getItem(`classes_${user?.id}`);
       if (localClasses) {
         const parsed: Class[] = JSON.parse(localClasses);
@@ -221,15 +215,19 @@ export default function DashboardPage() {
 
     setClasses(updatedClasses);
 
+    // Save to localStorage immediately
     if (user) {
       localStorage.setItem(`classes_${user.id}`, JSON.stringify(updatedClasses));
     }
 
+    // Sync to backend asynchronously (don't block UI)
     try {
       await classService.updateClass(String(updatedClass.id), updatedClass);
-      setSyncError('');
+      setSyncError(''); // Clear any previous errors
     } catch (error) {
       console.error('Error saving class to backend:', error);
+      // Don't show error to user, data is saved locally
+      // Backend will sync when connection is restored
     }
   };
 
@@ -246,11 +244,6 @@ export default function DashboardPage() {
     setShowChangePasswordModal(true);
   };
 
-  // ✅ NEW: Handle device management button click
-  const handleManageDevices = () => {
-    setShowStudentSelector(true);
-  };
-
   const handleSaveThresholds = (newThresholds: AttendanceThresholds, applyToClassIds: number[]) => {
     const updatedClasses = classes.map(cls =>
       applyToClassIds.includes(cls.id)
@@ -259,6 +252,7 @@ export default function DashboardPage() {
     );
     setClasses(updatedClasses);
 
+    // Sync each updated class
     updatedClasses.forEach(cls => {
       if (applyToClassIds.includes(cls.id)) {
         saveClass(cls);
@@ -272,7 +266,7 @@ export default function DashboardPage() {
   };
 
   const handleAddClass = async (newClass: Class) => {
-    console.log('🆕 Creating new class:', newClass);
+    console.log('ðŸ†• Creating new class:', newClass);
 
     const updatedClasses = [...classes, newClass];
     setClasses(updatedClasses);
@@ -280,17 +274,19 @@ export default function DashboardPage() {
     setShowSnapshot(false);
     setShowImportState(false);
 
+    // Save to localStorage immediately
     if (user) {
       localStorage.setItem(`classes_${user.id}`, JSON.stringify(updatedClasses));
-      console.log('💾 Saved to localStorage');
+      console.log('ðŸ’¾ Saved to localStorage');
     }
 
+    // CREATE new class on backend
     try {
       const result = await classService.createClass(newClass);
-      console.log('✅ Backend response:', result);
+      console.log('âœ… Backend response:', result);
       setSyncError('');
     } catch (error) {
-      console.error('❌ Backend error:', error);
+      console.error('âŒ Backend error:', error);
       setSyncError('Failed to sync new class');
     }
   };
@@ -310,6 +306,7 @@ export default function DashboardPage() {
     const updatedClasses = classes.filter(c => c.id !== classToDelete.id);
     setClasses(updatedClasses);
 
+    // âœ… Update localStorage immediately
     if (user) {
       localStorage.setItem(`classes_${user.id}`, JSON.stringify(updatedClasses));
     }
@@ -324,9 +321,10 @@ export default function DashboardPage() {
       }
     }
 
+    // Delete from backend
     try {
       await classService.deleteClass(String(classToDelete.id));
-      setSyncError('');
+      setSyncError(''); // âœ… Clear any previous errors
     } catch (error) {
       console.error('Error deleting class:', error);
       setSyncError('Failed to sync deletion');
@@ -335,6 +333,7 @@ export default function DashboardPage() {
     setShowDeleteClassModal(false);
     setClassToDelete(null);
   };
+
 
   const handleClassSelect = (id: number) => {
     setActiveClassId(id);
@@ -372,6 +371,7 @@ export default function DashboardPage() {
 
     setClasses(updatedClasses);
 
+    // Sync to backend
     const updatedClass = updatedClasses.find(c => c.id === activeClassId);
     if (updatedClass) {
       saveClass(updatedClass);
@@ -396,6 +396,7 @@ export default function DashboardPage() {
 
     setClasses(updatedClasses);
 
+    // Debounced sync to backend
     const updatedClass = updatedClasses.find(c => c.id === activeClassId);
     if (updatedClass) {
       saveClass(updatedClass);
@@ -433,6 +434,7 @@ export default function DashboardPage() {
               const currentStatus = student.attendance[dateKey];
               let newStatus: { status: 'P' | 'A' | 'L'; count: number } | undefined;
 
+              // Handle both old format (string) and new format (object)
               let currentStatusValue: 'P' | 'A' | 'L' | undefined;
               if (currentStatus) {
                 if (typeof currentStatus === 'object' && 'status' in currentStatus) {
@@ -442,6 +444,7 @@ export default function DashboardPage() {
                 }
               }
 
+              // Cycle through statuses (always reset count to 1 when changing status)
               if (!currentStatusValue) {
                 newStatus = { status: 'P', count: 1 };
               } else if (currentStatusValue === 'P') {
@@ -449,7 +452,7 @@ export default function DashboardPage() {
               } else if (currentStatusValue === 'A') {
                 newStatus = { status: 'L', count: 1 };
               } else {
-                newStatus = undefined;
+                newStatus = undefined; // L → empty
               }
 
               return {
@@ -474,6 +477,9 @@ export default function DashboardPage() {
     }
   };
 
+  // Add this function in your dashboard page
+  // Put it right AFTER handleToggleAttendance (around line 380)
+
   const handleIncrementAttendance = (studentId: number, day: number) => {
     if (!activeClassId) return;
 
@@ -487,7 +493,9 @@ export default function DashboardPage() {
             if (student.id === studentId) {
               const currentStatus = student.attendance[dateKey];
 
+              // Only increment if there's already a status
               if (currentStatus) {
+                // If it's already an object with count, increment
                 if (typeof currentStatus === 'object' && 'count' in currentStatus) {
                   return {
                     ...student,
@@ -500,13 +508,14 @@ export default function DashboardPage() {
                     }
                   };
                 } else {
+                  // Convert old format (string) to new format (object with count 2)
                   return {
                     ...student,
                     attendance: {
                       ...student.attendance,
                       [dateKey]: {
                         status: currentStatus as 'P' | 'A' | 'L',
-                        count: 2
+                        count: 2 // First right-click makes it 2
                       }
                     }
                   };
@@ -580,7 +589,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center">
+      <div className="min-h-screen bg-linear-to-br from-emerald-50 via-teal-50 to-cyan-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-slate-600">Loading...</p>
@@ -595,23 +604,12 @@ export default function DashboardPage() {
 
   const activeClass = classes.find(c => c.id === activeClassId);
 
-  // Get all students from all classes for device management
-  const allStudentsWithEmails = classes.flatMap(cls => 
-    cls.students
-      .filter(student => student.email) // Only students with emails
-      .map(student => ({
-        email: student.email!,
-        name: student.name,
-        className: cls.name
-      }))
-  );
-
   return (
-    <div className="min-h-screen h-screen bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 flex flex-col overflow-hidden">
+    <div className="min-h-screen h-screen bg-linear-to-br from-emerald-50 via-teal-50 to-cyan-50 flex flex-col overflow-hidden">
       {/* Header */}
       <header className="bg-white border-b border-emerald-200/60 shadow-sm shrink-0">
-        <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-4">
+        <div className="px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
             <button
               data-mobile-menu
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
@@ -620,11 +618,11 @@ export default function DashboardPage() {
               <Menu className="w-5 h-5 text-slate-600" />
             </button>
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shadow-md">
-                <img src="/logo.png" alt="Lernova Attendsheets Logo" className="w-8 h-8 sm:w-10 sm:h-10" />
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md">
+                <img src="/logo.png" alt="Lernova Attendsheets Logo" className="w-10 h-10" />
               </div>
               <div className="hidden md:block">
-                <h1 className="text-lg sm:text-xl font-bold text-emerald-900">Lernova Attendsheets</h1>
+                <h1 className="text-xl font-bold text-emerald-900">Lernova Attendsheets</h1>
                 {syncing && (
                   <p className="text-xs text-blue-600">Syncing...</p>
                 )}
@@ -634,7 +632,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-4">
             {!showImportState && classes.length > 0 && (
               <MonthYearSelector
                 currentMonth={currentMonth}
@@ -651,9 +649,9 @@ export default function DashboardPage() {
                   setShowAllClasses(false);
                   setActiveClassId(null);
                 }}
-                className="flex items-center gap-2 px-2 sm:px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition-colors font-medium text-sm cursor-pointer"
+                className="flex items-center gap-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition-colors font-medium text-sm cursor-pointer"
               >
-                <LayoutDashboard className="w-4 h-4 sm:w-5 sm:h-5" />
+                <LayoutDashboard className="w-5 h-5" />
                 <span className="hidden sm:inline">Dashboard</span>
               </button>
             )}
@@ -696,10 +694,9 @@ export default function DashboardPage() {
           onOpenSettings={handleOpenSettings}
           onLogout={handleLogout}
           onUpdateClassName={handleUpdateClassName}
-          onManageDevices={handleManageDevices}
         />
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <main className="flex-1 overflow-y-auto p-6">
           {showImportState ? (
             <ImportDataState
               onImport={handleAddClass}
@@ -723,16 +720,19 @@ export default function DashboardPage() {
               onBack={() => setShowAllClasses(false)}
               onClassSelect={handleClassSelect}
               onDeleteClass={async (classId) => {
+                // Delete the class directly
                 const classToRemove = classes.find(c => c.id === classId);
                 if (!classToRemove) return;
 
                 const updatedClasses = classes.filter(c => c.id !== classId);
                 setClasses(updatedClasses);
 
+                // Update localStorage immediately
                 if (user) {
                   localStorage.setItem(`classes_${user.id}`, JSON.stringify(updatedClasses));
                 }
 
+                // If it was the active class, reset view
                 if (activeClassId === classId) {
                   if (updatedClasses.length > 0) {
                     setShowSnapshot(true);
@@ -741,6 +741,7 @@ export default function DashboardPage() {
                   setActiveClassId(null);
                 }
 
+                // Delete from backend
                 try {
                   await classService.deleteClass(String(classId));
                   setSyncError('');
@@ -809,7 +810,7 @@ export default function DashboardPage() {
           classId={activeClass.id}
           className={activeClass.name}
           totalStudents={activeClass.students.length}
-          currentDate={getTodayDate()}
+          currentDate={getTodayDate()}  // ✅ CORRECT
           onClose={() => setShowQRModal(false)}
         />
       )}
@@ -838,119 +839,6 @@ export default function DashboardPage() {
         isOpen={showChangePasswordModal}
         onClose={() => setShowChangePasswordModal(false)}
       />
-
-      {/* ✅ Student Selector Modal */}
-      {showStudentSelector && (
-        <StudentSelectorModal
-          students={allStudentsWithEmails}
-          onSelect={(student) => {
-            setSelectedStudentForDevices(student);
-            setShowStudentSelector(false);
-            setShowDeviceManager(true);
-          }}
-          onClose={() => setShowStudentSelector(false)}
-        />
-      )}
-
-      {/* ✅ Device Manager Modal */}
-      {showDeviceManager && selectedStudentForDevices && (
-        <StudentDeviceManager
-          studentEmail={selectedStudentForDevices.email}
-          studentName={selectedStudentForDevices.name}
-          onClose={() => {
-            setShowDeviceManager(false);
-            setSelectedStudentForDevices(null);
-          }}
-        />
-      )}
     </div>
   );
 }
-
-// ✅ Student Selector Component
-interface StudentSelectorModalProps {
-  students: Array<{ email: string; name: string; className: string }>;
-  onSelect: (student: { email: string; name: string }) => void;
-  onClose: () => void;
-}
-
-const StudentSelectorModal: React.FC<StudentSelectorModalProps> = ({ 
-  students, 
-  onSelect, 
-  onClose 
-}) => {
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const filteredStudents = students.filter(student =>
-    student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    student.className.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold mb-1">Select Student</h2>
-              <p className="text-blue-100 text-sm">Choose a student to manage their devices</p>
-            </div>
-            <button
-              onClick={onClose}
-              className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-lg flex items-center justify-center transition-colors"
-            >
-              <span className="text-2xl">×</span>
-            </button>
-          </div>
-        </div>
-
-        <div className="p-6">
-          <div className="mb-4">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name, email, or class..."
-              className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
-              autoFocus
-            />
-          </div>
-
-          <div className="max-h-[400px] overflow-y-auto space-y-2">
-            {filteredStudents.length === 0 ? (
-              <div className="text-center py-12">
-                <Users className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-600 font-medium">No students found</p>
-                <p className="text-slate-500 text-sm mt-1">
-                  {searchQuery ? 'Try a different search term' : 'No students with email addresses enrolled'}
-                </p>
-              </div>
-            ) : (
-              filteredStudents.map((student, index) => (
-                <button
-                  key={`${student.email}-${index}`}
-                  onClick={() => onSelect(student)}
-                  className="w-full p-4 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl transition-all text-left group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Users className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-900 group-hover:text-blue-700 truncate">
-                        {student.name}
-                      </p>
-                      <p className="text-sm text-slate-600 truncate">{student.email}</p>
-                      <p className="text-xs text-slate-500 mt-1">Class: {student.className}</p>
-                    </div>
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
