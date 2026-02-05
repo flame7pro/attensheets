@@ -14,8 +14,10 @@ import {
   CheckCircle,
   Loader2,
   X,
-  Clock
+  Clock,
+  AlertCircle
 } from 'lucide-react';
+import { getDeviceFingerprint } from '@/lib/deviceFingerprint';
 
 interface Device {
   device_hash?: string;
@@ -188,43 +190,46 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 sm:p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-bold mb-1">Device Management</h2>
-              <p className="text-blue-100 text-xs sm:text-sm">
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 p-4 sm:p-6 text-white flex-shrink-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <Shield className="w-6 h-6 sm:w-7 sm:h-7 flex-shrink-0" />
+                <h2 className="text-xl sm:text-2xl font-bold truncate">Device Management</h2>
+              </div>
+              <p className="text-emerald-50 text-sm sm:text-base truncate">
                 Managing devices for <span className="font-semibold">{studentName}</span>
               </p>
-              <p className="text-blue-200 text-xs mt-1">{studentEmail}</p>
+              <p className="text-emerald-100 text-xs sm:text-sm mt-1 truncate">{studentEmail}</p>
             </div>
             <button
               onClick={onClose}
-              className="w-8 h-8 sm:w-10 sm:h-10 bg-white/20 hover:bg-white/30 rounded-lg flex items-center justify-center transition-colors flex-shrink-0"
+              className="w-9 h-9 sm:w-10 sm:h-10 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center transition-all flex-shrink-0 hover:rotate-90"
             >
-              <X className="w-4 h-4 sm:w-5 sm:h-5" />
+              <X className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
           </div>
         </div>
 
         {/* Messages */}
-        <div className="p-4 sm:p-6 space-y-3">
+        <div className="p-3 sm:p-4 lg:p-6 space-y-3 flex-shrink-0">
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3 sm:p-4 text-red-700 text-xs sm:text-sm flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-0.5" />
-              <div>
+            <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-3 sm:p-4 text-red-700 text-xs sm:text-sm flex items-start gap-2 animate-in slide-in-from-top">
+              <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
                 <p className="font-semibold">Error</p>
-                <p>{error}</p>
+                <p className="break-words">{error}</p>
               </div>
             </div>
           )}
 
           {success && (
-            <div className="bg-green-50 border border-green-200 rounded-xl p-3 sm:p-4 text-green-700 text-xs sm:text-sm flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-              {success}
+            <div className="bg-green-50 border-l-4 border-green-500 rounded-lg p-3 sm:p-4 text-green-700 text-xs sm:text-sm flex items-center gap-2 animate-in slide-in-from-top">
+              <CheckCircle className="w-5 h-5 flex-shrink-0" />
+              <span className="break-words">{success}</span>
             </div>
           )}
 
@@ -233,122 +238,126 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
             <button
               onClick={() => setShowAddModal(true)}
               disabled={loading}
-              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl hover:shadow-lg transition-all font-medium text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
             >
-              <Plus className="w-3 h-3 sm:w-4 sm:h-4" />
+              <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
               Add New Device
             </button>
 
             <button
               onClick={handleResetAllDevices}
               disabled={devices.length === 0 || loading}
-              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl hover:shadow-lg transition-all font-medium text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
             >
-              <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4" />
+              <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
               Reset All Devices
             </button>
 
             <button
               onClick={fetchDevices}
               disabled={loading}
-              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:shadow-lg transition-all font-medium text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.02]"
             >
-              <RefreshCw className={`w-3 h-3 sm:w-4 sm:h-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
+              <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${loading ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Refresh</span>
             </button>
           </div>
         </div>
 
         {/* Device List */}
-        <div className="px-4 sm:px-6 pb-4 sm:pb-6 max-h-[500px] overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-3 sm:px-4 lg:px-6 pb-4 sm:pb-6">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-4" />
-              <p className="text-slate-600 text-sm">Loading devices...</p>
+            <div className="flex flex-col items-center justify-center py-16 sm:py-20">
+              <Loader2 className="w-12 h-12 sm:w-16 sm:h-16 text-emerald-600 animate-spin mb-4" />
+              <p className="text-slate-600 text-sm sm:text-base">Loading devices...</p>
             </div>
           ) : devices.length === 0 ? (
-            <div className="text-center py-12">
-              <Shield className="w-12 h-12 sm:w-16 sm:h-16 text-slate-300 mx-auto mb-4" />
-              <p className="text-slate-600 font-medium text-sm sm:text-base">No trusted devices found</p>
-              <p className="text-slate-500 text-xs sm:text-sm mt-1">
+            <div className="text-center py-16 sm:py-20">
+              <Shield className="w-16 h-16 sm:w-20 sm:h-20 text-slate-300 mx-auto mb-4" />
+              <p className="text-slate-600 font-medium text-base sm:text-lg mb-2">No trusted devices found</p>
+              <p className="text-slate-500 text-sm sm:text-base px-4">
                 Student hasn't logged in yet or all devices have been removed
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
               {devices.map((device, index) => {
                 const DeviceIcon = getDeviceIcon(device.device_type);
                 return (
                   <div
                     key={device.device_hash || index}
-                    className="bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-4 hover:shadow-md transition-shadow"
+                    className="bg-gradient-to-br from-slate-50 to-slate-100 border-2 border-slate-200 rounded-xl p-4 sm:p-5 hover:shadow-xl transition-all hover:scale-[1.02] group"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex gap-3 sm:gap-4 flex-1 min-w-0">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                          <DeviceIcon className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
-                        </div>
+                    <div className="flex items-start gap-3 sm:gap-4">
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform shadow-lg">
+                        <DeviceIcon className="w-6 h-6 sm:w-7 sm:h-7 text-white" />
+                      </div>
 
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h3 className="font-semibold text-slate-900 text-sm sm:text-base truncate">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2 mb-3">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-slate-900 text-base sm:text-lg truncate mb-1">
                               {device.name}
                             </h3>
-                            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium flex-shrink-0">
+                            <span className="inline-block px-2.5 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
                               Trusted
                             </span>
                           </div>
+                          <button
+                            onClick={() => handleRemoveDevice(device.device_hash || '')}
+                            disabled={devices.length === 1}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 group-hover:scale-110"
+                            title={devices.length === 1 ? "Cannot remove last device" : "Remove device"}
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 text-xs sm:text-sm">
-                            <div>
-                              <p className="text-slate-500 text-xs">Browser</p>
-                              <p className="text-slate-700 font-medium truncate">{device.browser}</p>
+                        <div className="space-y-2.5">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-white/50 rounded-lg p-2">
+                              <p className="text-slate-500 text-xs font-medium mb-0.5">Browser</p>
+                              <p className="text-slate-700 font-semibold text-xs sm:text-sm truncate">{device.browser}</p>
                             </div>
-                            <div>
-                              <p className="text-slate-500 text-xs">Operating System</p>
-                              <p className="text-slate-700 font-medium truncate">{device.os}</p>
+                            <div className="bg-white/50 rounded-lg p-2">
+                              <p className="text-slate-500 text-xs font-medium mb-0.5">OS</p>
+                              <p className="text-slate-700 font-semibold text-xs sm:text-sm truncate">{device.os}</p>
                             </div>
-                            <div>
-                              <p className="text-slate-500 text-xs flex items-center gap-1">
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-white/50 rounded-lg p-2">
+                              <p className="text-slate-500 text-xs font-medium flex items-center gap-1 mb-0.5">
                                 <Clock className="w-3 h-3" />
                                 First Seen
                               </p>
-                              <p className="text-slate-700 font-medium text-xs">
+                              <p className="text-slate-700 font-semibold text-xs">
                                 {formatDate(device.first_seen)}
                               </p>
                             </div>
-                            <div>
-                              <p className="text-slate-500 text-xs flex items-center gap-1">
+                            <div className="bg-white/50 rounded-lg p-2">
+                              <p className="text-slate-500 text-xs font-medium flex items-center gap-1 mb-0.5">
                                 <Clock className="w-3 h-3" />
                                 Last Login
                               </p>
-                              <p className="text-slate-700 font-medium text-xs">
+                              <p className="text-slate-700 font-semibold text-xs">
                                 {formatDate(device.last_seen)}
                               </p>
                             </div>
                           </div>
 
-                          <div className="mt-3 flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+                          <div className="flex items-center justify-between pt-2 border-t border-slate-200">
                             <div className="text-xs text-slate-600">
-                              <span className="font-semibold">{device.login_count}</span> total logins
+                              <span className="font-bold text-emerald-600">{device.login_count}</span> total logins
                             </div>
                             {device.device_hash && (
-                              <div className="text-xs text-slate-500 font-mono truncate max-w-full">
-                                ID: {device.device_hash}
+                              <div className="text-xs text-slate-400 font-mono truncate max-w-[150px]">
+                                {device.device_hash}
                               </div>
                             )}
                           </div>
                         </div>
                       </div>
-
-                      <button
-                        onClick={() => handleRemoveDevice(device.device_hash || '')}
-                        disabled={devices.length === 1}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-                        title={devices.length === 1 ? "Cannot remove last device" : "Remove device"}
-                      >
-                        <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                      </button>
                     </div>
                   </div>
                 );
@@ -358,10 +367,13 @@ export const StudentDeviceManager: React.FC<StudentDeviceManagerProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="bg-slate-50 border-t border-slate-200 p-3 sm:p-4 text-center">
-          <p className="text-xs text-slate-600">
-            ⚠️ Device changes take effect immediately. Student will be logged out from removed devices.
-          </p>
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-t-2 border-amber-200 p-3 sm:p-4 text-center flex-shrink-0">
+          <div className="flex items-center justify-center gap-2 text-amber-800">
+            <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+            <p className="text-xs sm:text-sm font-medium">
+              Device changes take effect immediately. Student will be logged out from removed devices.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -397,7 +409,6 @@ const AddDeviceModal: React.FC<AddDeviceModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
-    device_id: '',
     device_name: '',
     browser: '',
     os: '',
@@ -409,13 +420,18 @@ const AddDeviceModal: React.FC<AddDeviceModalProps> = ({
     e.preventDefault();
     setError('');
 
-    if (!formData.device_id || !formData.device_name || !formData.browser || !formData.os) {
+    if (!formData.device_name || !formData.browser || !formData.os) {
       setError('Please fill in all required fields');
       return;
     }
 
     setLoading(true);
     try {
+      // ✅ AUTO-GENERATE device fingerprint
+      console.log('🔍 Generating device fingerprint...');
+      const deviceFingerprint = await getDeviceFingerprint();
+      console.log('✅ Device fingerprint generated:', deviceFingerprint.id);
+
       const token = localStorage.getItem('access_token');
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/admin/student-devices/add`,
@@ -427,7 +443,7 @@ const AddDeviceModal: React.FC<AddDeviceModalProps> = ({
           },
           body: JSON.stringify({
             student_email: studentEmail,
-            new_device_id: formData.device_id,
+            new_device_id: deviceFingerprint.id,  // ✅ Use auto-generated ID
             new_device_info: {
               name: formData.device_name,
               browser: formData.browser,
@@ -453,36 +469,45 @@ const AddDeviceModal: React.FC<AddDeviceModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-        <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-4 sm:p-6 text-white rounded-t-2xl sticky top-0">
-          <h3 className="text-lg sm:text-xl font-bold mb-1">Add New Trusted Device</h3>
-          <p className="text-emerald-100 text-xs sm:text-sm">For {studentName}</p>
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[60] p-3 sm:p-4 animate-in fade-in">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[95vh] overflow-hidden flex flex-col animate-in slide-in-from-bottom">
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 p-4 sm:p-6 text-white flex-shrink-0">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-lg sm:text-xl font-bold mb-1">Add New Trusted Device</h3>
+              <p className="text-emerald-100 text-xs sm:text-sm truncate">For {studentName}</p>
+            </div>
+            <button
+              onClick={onClose}
+              disabled={loading}
+              className="w-9 h-9 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center transition-all flex-shrink-0 hover:rotate-90 disabled:opacity-50"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-red-700 text-xs sm:text-sm">
+            <div className="bg-red-50 border-l-4 border-red-500 rounded-lg p-3 text-red-700 text-xs sm:text-sm animate-in slide-in-from-top">
               {error}
             </div>
           )}
 
-          <div>
-            <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">
-              Device ID <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.device_id}
-              onChange={(e) => setFormData({ ...formData, device_id: e.target.value })}
-              placeholder="e.g., ABC123XYZ789"
-              className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border-2 border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all text-sm"
-              disabled={loading}
-            />
+          <div className="bg-gradient-to-r from-blue-50 to-cyan-50 border-l-4 border-blue-500 rounded-lg p-3 sm:p-4">
+            <div className="flex items-start gap-2">
+              <Shield className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-blue-900 text-sm sm:text-base mb-1">🔐 Auto-Generated Device ID</p>
+                <p className="text-blue-700 text-xs sm:text-sm">
+                  A unique device fingerprint will be automatically generated from your current browser when you click "Add Device".
+                </p>
+              </div>
+            </div>
           </div>
 
           <div>
-            <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">
+            <label className="block text-sm font-bold text-slate-700 mb-2">
               Device Name <span className="text-red-500">*</span>
             </label>
             <input
@@ -490,95 +515,95 @@ const AddDeviceModal: React.FC<AddDeviceModalProps> = ({
               value={formData.device_name}
               onChange={(e) => setFormData({ ...formData, device_name: e.target.value })}
               placeholder="e.g., Student's iPhone 13"
-              className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border-2 border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all text-sm"
+              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all text-sm sm:text-base"
               disabled={loading}
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">
+              <label className="block text-sm font-bold text-slate-700 mb-2">
                 Browser <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 value={formData.browser}
                 onChange={(e) => setFormData({ ...formData, browser: e.target.value })}
-                placeholder="e.g., Chrome"
-                className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border-2 border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all text-sm"
+                placeholder="e.g., Chrome 120"
+                className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all text-sm sm:text-base"
                 disabled={loading}
               />
             </div>
 
             <div>
-              <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">
-                OS <span className="text-red-500">*</span>
+              <label className="block text-sm font-bold text-slate-700 mb-2">
+                Operating System <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 value={formData.os}
                 onChange={(e) => setFormData({ ...formData, os: e.target.value })}
                 placeholder="e.g., iOS 17"
-                className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border-2 border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all text-sm"
+                className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all text-sm sm:text-base"
                 disabled={loading}
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">
+            <label className="block text-sm font-bold text-slate-700 mb-2">
               Device Type
             </label>
             <select
               value={formData.device_type}
               onChange={(e) => setFormData({ ...formData, device_type: e.target.value })}
-              className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border-2 border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all text-sm"
+              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all text-sm sm:text-base bg-white"
               disabled={loading}
             >
               <option value="">Select device type</option>
-              <option value="Mobile">Mobile Phone</option>
-              <option value="Tablet">Tablet</option>
-              <option value="Laptop">Laptop</option>
-              <option value="Desktop">Desktop</option>
+              <option value="Mobile">📱 Mobile Phone</option>
+              <option value="Tablet">📱 Tablet</option>
+              <option value="Laptop">💻 Laptop</option>
+              <option value="Desktop">🖥️ Desktop</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-2">
+            <label className="block text-sm font-bold text-slate-700 mb-2">
               Reason for Adding
             </label>
             <textarea
               value={formData.reason}
               onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-              placeholder="e.g., Student got a new phone"
-              rows={2}
-              className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border-2 border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all resize-none text-sm"
+              placeholder="e.g., Student got a new phone and needs access"
+              rows={3}
+              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border-2 border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100 transition-all resize-none text-sm sm:text-base"
               disabled={loading}
             />
           </div>
 
-          <div className="flex gap-3 pt-4">
+          <div className="flex flex-col-reverse sm:flex-row gap-3 pt-4">
             <button
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 px-3 sm:px-4 py-2 sm:py-2.5 border-2 border-slate-200 text-slate-700 font-semibold rounded-xl hover:bg-slate-50 transition-colors disabled:opacity-50 text-sm"
+              className="flex-1 px-4 py-3 border-2 border-slate-300 text-slate-700 font-bold rounded-xl hover:bg-slate-50 transition-all disabled:opacity-50 text-sm sm:text-base"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 px-3 sm:px-4 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+              className="flex-1 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold rounded-xl hover:shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm sm:text-base hover:scale-[1.02]"
             >
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Adding...
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Adding Device...
                 </>
               ) : (
                 <>
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-5 h-5" />
                   Add Device
                 </>
               )}
