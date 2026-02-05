@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, UserPlus, LogIn, GraduationCap, Users, CheckCircle, Loader2 } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, UserPlus, LogIn, GraduationCap, Users, CheckCircle, Loader2, Shield } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context-email';
 import { useRouter } from 'next/navigation';
 import { PasswordResetModal } from './PasswordResetModal';
@@ -28,6 +28,10 @@ export const AuthForm: React.FC<AuthFormProps> = ({
   const [showResetModal, setShowResetModal] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+
+  // ✅ NEW: Device fingerprinting consent state (only for students)
+  const [deviceConsentGiven, setDeviceConsentGiven] = useState(false);
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -55,6 +59,12 @@ export const AuthForm: React.FC<AuthFormProps> = ({
       return;
     }
 
+    // ✅ NEW: Check device consent for students
+    if (selectedRole === 'student' && !deviceConsentGiven) {
+      setError('Please agree to device fingerprinting to continue');
+      return;
+    }
+
     setLoading(true);
     try {
       localStorage.setItem('signup_role', selectedRole);
@@ -68,6 +78,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
           setVerificationEmail(formData.email);
           setShowVerification(true);
           setFormData({ name: '', email: '', password: '', confirmPassword: '' });
+          setDeviceConsentGiven(false); // Reset consent
         }, 800);
       } else {
         setError(result.message);
@@ -114,8 +125,23 @@ export const AuthForm: React.FC<AuthFormProps> = ({
     setIsSignUp(signUpMode);
     setError('');
     setSuccess('');
-    setRememberMe(false); // Reset remember me when switching modes
+    setRememberMe(false);
+    setDeviceConsentGiven(false); // Reset consent when switching modes
     onModeChange?.(signUpMode);
+  };
+
+  const handleRoleChange = (role: 'teacher' | 'student') => {
+    setSelectedRole(role);
+    setDeviceConsentGiven(false); // Reset consent when changing roles
+    setError(''); // Clear any existing errors
+  };
+
+  // ✅ Check if signup button should be enabled
+  const isSignupEnabled = () => {
+    if (selectedRole === 'teacher') {
+      return true; // Teachers don't need device consent
+    }
+    return deviceConsentGiven; // Students need device consent
   };
 
   return (
@@ -140,11 +166,10 @@ export const AuthForm: React.FC<AuthFormProps> = ({
           <div className="bg-slate-100 rounded-lg p-1 flex gap-1">
             <button
               onClick={() => handleModeChange(true)}
-              className={`flex-1 py-2.5 md:py-3 px-2 md:px-4 cursor-pointer rounded-lg font-semibold transition-all duration-300 flex items-center justify-center gap-1.5 md:gap-2 text-sm md:text-base ${
-                isSignUp
+              className={`flex-1 py-2.5 md:py-3 px-2 md:px-4 cursor-pointer rounded-lg font-semibold transition-all duration-300 flex items-center justify-center gap-1.5 md:gap-2 text-sm md:text-base ${isSignUp
                   ? 'bg-emerald-600 text-white shadow-lg scale-105'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-              }`}
+                }`}
             >
               <UserPlus className="w-4 h-4" />
               <span className="hidden sm:inline">Sign Up</span>
@@ -152,11 +177,10 @@ export const AuthForm: React.FC<AuthFormProps> = ({
             </button>
             <button
               onClick={() => handleModeChange(false)}
-              className={`flex-1 py-2.5 md:py-3 px-2 md:px-4 cursor-pointer rounded-lg font-semibold transition-all duration-300 flex items-center justify-center gap-1.5 md:gap-2 text-sm md:text-base ${
-                !isSignUp
+              className={`flex-1 py-2.5 md:py-3 px-2 md:px-4 cursor-pointer rounded-lg font-semibold transition-all duration-300 flex items-center justify-center gap-1.5 md:gap-2 text-sm md:text-base ${!isSignUp
                   ? 'bg-emerald-600 text-white shadow-lg scale-105'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-              }`}
+                }`}
             >
               <LogIn className="w-4 h-4" />
               <span className="hidden sm:inline">Sign In</span>
@@ -170,22 +194,19 @@ export const AuthForm: React.FC<AuthFormProps> = ({
               <label className="text-sm font-semibold text-slate-700">I am signing up as:</label>
               <div className="grid grid-cols-2 gap-3">
                 <button
-                  onClick={() => setSelectedRole('teacher')}
-                  className={`p-3 md:p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer transform hover:scale-105 ${
-                    selectedRole === 'teacher'
+                  onClick={() => handleRoleChange('teacher')}
+                  className={`p-3 md:p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer transform hover:scale-105 ${selectedRole === 'teacher'
                       ? 'border-emerald-500 bg-emerald-50 shadow-lg'
                       : 'border-slate-200 hover:border-emerald-300 hover:shadow'
-                  }`}
+                    }`}
                 >
                   <GraduationCap
-                    className={`w-5 h-5 md:w-6 md:h-6 mx-auto mb-2 transition-colors ${
-                      selectedRole === 'teacher' ? 'text-emerald-600' : 'text-slate-400'
-                    }`}
+                    className={`w-5 h-5 md:w-6 md:h-6 mx-auto mb-2 transition-colors ${selectedRole === 'teacher' ? 'text-emerald-600' : 'text-slate-400'
+                      }`}
                   />
                   <p
-                    className={`font-semibold text-xs md:text-sm transition-colors ${
-                      selectedRole === 'teacher' ? 'text-emerald-700' : 'text-slate-600'
-                    }`}
+                    className={`font-semibold text-xs md:text-sm transition-colors ${selectedRole === 'teacher' ? 'text-emerald-700' : 'text-slate-600'
+                      }`}
                   >
                     Teacher
                   </p>
@@ -193,22 +214,19 @@ export const AuthForm: React.FC<AuthFormProps> = ({
                 </button>
 
                 <button
-                  onClick={() => setSelectedRole('student')}
-                  className={`p-3 md:p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer transform hover:scale-105 ${
-                    selectedRole === 'student'
+                  onClick={() => handleRoleChange('student')}
+                  className={`p-3 md:p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer transform hover:scale-105 ${selectedRole === 'student'
                       ? 'border-teal-500 bg-teal-50 shadow-lg'
                       : 'border-slate-200 hover:border-teal-300 hover:shadow'
-                  }`}
+                    }`}
                 >
                   <Users
-                    className={`w-5 h-5 md:w-6 md:h-6 mx-auto mb-2 transition-colors ${
-                      selectedRole === 'student' ? 'text-teal-600' : 'text-slate-400'
-                    }`}
+                    className={`w-5 h-5 md:w-6 md:h-6 mx-auto mb-2 transition-colors ${selectedRole === 'student' ? 'text-teal-600' : 'text-slate-400'
+                      }`}
                   />
                   <p
-                    className={`font-semibold text-xs md:text-sm transition-colors ${
-                      selectedRole === 'student' ? 'text-teal-700' : 'text-slate-600'
-                    }`}
+                    className={`font-semibold text-xs md:text-sm transition-colors ${selectedRole === 'student' ? 'text-teal-700' : 'text-slate-600'
+                      }`}
                   >
                     Student
                   </p>
@@ -276,14 +294,50 @@ export const AuthForm: React.FC<AuthFormProps> = ({
               />
             )}
 
+            {/* ✅ NEW: Device Fingerprinting Consent (Only for Student Sign Up) */}
+            {isSignUp && selectedRole === 'student' && (
+              <div className="animate-slide-down bg-blue-50 border-2 border-blue-200 rounded-xl p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <Shield className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h3 className="text-sm font-semibold text-blue-900 mb-1">Security Notice</h3>
+                    <p className="text-xs text-blue-700 leading-relaxed mb-3">
+                      For security purposes, we use device fingerprinting to protect your account from unauthorized access.
+                      This helps ensure only your trusted devices can access your attendance records.
+                    </p>
+
+                    <label className="flex items-start gap-2.5 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={deviceConsentGiven}
+                        onChange={(e) => setDeviceConsentGiven(e.target.checked)}
+                        className="mt-0.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
+                      />
+                      <span className="text-xs text-blue-800 group-hover:text-blue-900 transition-colors">
+                        I agree to share my device information (browser type, operating system, and device ID)
+                        for security purposes. This data will be encrypted and used only for account protection.
+                      </span>
+                    </label>
+                  </div>
+                </div>
+
+                {!deviceConsentGiven && (
+                  <div className="text-xs text-blue-600 flex items-center gap-1.5 mt-2 ml-8">
+                    <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse"></span>
+                    <span>Please accept device fingerprinting to continue</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {!isSignUp && (
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 text-sm">
                 <label className="flex items-center gap-2 text-slate-600 cursor-pointer hover:text-slate-800 transition-colors">
-                  <input 
-                    type="checkbox" 
+                  <input
+                    type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" 
+                    className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
                   />
                   <span>Remember me</span>
                 </label>
@@ -299,8 +353,8 @@ export const AuthForm: React.FC<AuthFormProps> = ({
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2 transform hover:scale-105"
+              disabled={loading || (isSignUp && !isSignupEnabled())}
+              className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer flex items-center justify-center gap-2 transform hover:scale-105 disabled:transform-none"
             >
               {loading ? (
                 <>
