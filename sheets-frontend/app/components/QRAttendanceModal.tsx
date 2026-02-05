@@ -33,6 +33,8 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
     const lastCodeRef = useRef<string>('');
     const isGeneratingQR = useRef<boolean>(false);
+    const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
     const showNotification = (type: 'success' | 'error' | 'info', message: string) => {
         setNotification({ type, message });
@@ -117,9 +119,44 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         }
     };
 
-    // Timer sync with backend - polls backend every 500ms
+    // ✅ SMOOTH CLIENT-SIDE TIMER - Counts down every second
     useEffect(() => {
-        if (!isActive) return;
+        if (!isActive) {
+            // Clear timer when inactive
+            if (timerIntervalRef.current) {
+                clearInterval(timerIntervalRef.current);
+                timerIntervalRef.current = null;
+            }
+            return;
+        }
+
+        // Start smooth countdown timer (1 second intervals)
+        timerIntervalRef.current = setInterval(() => {
+            setTimeLeft(prev => {
+                if (prev <= 1) {
+                    return rotationInterval; // Reset to full interval
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => {
+            if (timerIntervalRef.current) {
+                clearInterval(timerIntervalRef.current);
+                timerIntervalRef.current = null;
+            }
+        };
+    }, [isActive, rotationInterval]);
+
+    // ✅ BACKEND SYNC - Poll every 2 seconds for code changes and student counts
+    useEffect(() => {
+        if (!isActive) {
+            if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+                pollIntervalRef.current = null;
+            }
+            return;
+        }
 
         const pollSession = async () => {
             try {
@@ -138,27 +175,19 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 const session = data.session;
                 const serverCode = session.current_code;
                 
-                // Update counts
+                // Update counts and session number
                 setScannedCount(session.scanned_students?.length ?? 0);
                 setSessionNumber(session.session_number || 1);
 
-                // Calculate time from backend's code_generated_at timestamp
-                const codeGeneratedAt = session.code_generated_at || session.last_rotation;
-                const serverInterval = Number(session.rotation_interval);
-                
-                if (codeGeneratedAt) {
-                    const now = new Date();
-                    const rotationTime = new Date(codeGeneratedAt);
-                    const elapsedMs = now.getTime() - rotationTime.getTime();
-                    const elapsedSec = Math.floor(elapsedMs / 1000);
-                    const remaining = Math.max(0, serverInterval - elapsedSec);
-                    setTimeLeft(remaining);
-                }
-
-                // Update QR code when it changes
+                // ✅ CRITICAL: Update QR code when it changes on backend
                 if (serverCode !== currentCode) {
-                    setRotationInterval(serverInterval);
+                    console.log(`[QR] Code changed: ${currentCode} -> ${serverCode}`);
                     setCurrentCode(serverCode);
+                    setRotationInterval(Number(session.rotation_interval));
+                    
+                    // ✅ RESET TIMER when code changes
+                    setTimeLeft(Number(session.rotation_interval));
+                    
                     await generateQRCode(serverCode);
                 }
             } catch (e) {
@@ -169,10 +198,15 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         // Initial poll
         pollSession();
 
-        // Poll every 500ms
-        const pollInterval = setInterval(pollSession, 500);
+        // Poll every 2 seconds (less frequent than timer for efficiency)
+        pollIntervalRef.current = setInterval(pollSession, 2000);
 
-        return () => clearInterval(pollInterval);
+        return () => {
+            if (pollIntervalRef.current) {
+                clearInterval(pollIntervalRef.current);
+                pollIntervalRef.current = null;
+            }
+        };
     }, [isActive, classId, currentDate, currentCode, generateQRCode]);
 
     useEffect(() => {
