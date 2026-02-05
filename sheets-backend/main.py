@@ -2261,7 +2261,7 @@ def rotate_qr_code_if_needed(session: Dict[str, Any]) -> Dict[str, Any]:
     
 @app.get("/qr/session/{class_id}")
 async def get_qr_session(class_id: str, date: str, email: str = Depends(verify_token)):
-    """Get active QR session with auto-rotation"""
+    """Get active QR session with smooth auto-rotation"""
     user = db.get_user_by_email(email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -2277,8 +2277,35 @@ async def get_qr_session(class_id: str, date: str, email: str = Depends(verify_t
     if not session or session["teacher_id"] != user["id"]:
         return {"active": False}
     
-    # ✅ AUTO-ROTATE CODE IF NEEDED
-    session = rotate_qr_code_if_needed(session)
+    # ✅ FIX: Smooth rotation check with proper timezone handling
+    rotation_interval = session.get("rotation_interval", 5)
+    last_rotation_str = session.get("code_generated_at") or session.get("last_rotation") or session.get("started_at")
+    
+    try:
+        # Parse timestamp (handle both Z and non-Z formats)
+        if last_rotation_str.endswith('Z'):
+            last_rotation_str = last_rotation_str[:-1]
+        last_rotation = datetime.fromisoformat(last_rotation_str)
+        
+        # Calculate elapsed time
+        now = datetime.now(timezone.utc)
+        elapsed_seconds = (now - last_rotation).total_seconds()
+        
+        # Rotate if needed (with 0.5s buffer to prevent edge case glitches)
+        if elapsed_seconds >= (rotation_interval - 0.5):
+            import random
+            import string
+            new_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+            now_iso = now.isoformat()
+            
+            session["current_code"] = new_code
+            session["last_rotation"] = now_iso
+            session["code_generated_at"] = now_iso
+            
+            print(f"[QR_ROTATION] Code rotated: {new_code} (after {elapsed_seconds:.1f}s)")
+        
+    except Exception as e:
+        print(f"[QR_ROTATION] Error during rotation: {e}")
     
     # Update in memory
     db.active_qr_sessions[session_key] = session
