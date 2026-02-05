@@ -108,22 +108,30 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
   const handleRightClick = (e: React.MouseEvent, studentId: number, day: number) => {
     e.preventDefault();
 
-    // ✅ FIX: Enable multi-session modal for ALL modes (including QR)
     const student = activeClass.students.find(s => s.id === studentId);
     if (!student) return;
 
     const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const dayData = student.attendance[dateKey];
 
+    console.log('[RIGHT_CLICK] Student:', student.name);
+    console.log('[RIGHT_CLICK] Date:', dateKey);
+    console.log('[RIGHT_CLICK] Current data:', dayData);
+
     // Parse current sessions
     let currentSessions: Array<{ id: string; name: string; status: 'P' | 'A' | 'L' | null }> = [];
 
     if (dayData) {
       if (typeof dayData === 'object' && 'sessions' in dayData) {
-        // New format with sessions array
-        currentSessions = dayData.sessions.map(s => ({ ...s, status: s.status as 'P' | 'A' | 'L' | null }));
+        // NEW FORMAT: sessions array
+        console.log('[RIGHT_CLICK] Format: sessions array');
+        currentSessions = dayData.sessions.map(s => ({ 
+          ...s, 
+          status: s.status as 'P' | 'A' | 'L' | null 
+        }));
       } else if (typeof dayData === 'object' && 'status' in dayData) {
-        // Old format with count
+        // OLD FORMAT: { status: 'P', count: 2 }
+        console.log('[RIGHT_CLICK] Format: status+count');
         const count = dayData.count || 1;
         for (let i = 0; i < count; i++) {
           currentSessions.push({
@@ -133,7 +141,8 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
           });
         }
       } else if (typeof dayData === 'string') {
-        // Very old format - single string
+        // VERY OLD FORMAT: 'P' | 'A' | 'L'
+        console.log('[RIGHT_CLICK] Format: simple string');
         currentSessions.push({
           id: 'session_1',
           name: 'Session 1',
@@ -142,7 +151,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       }
     }
 
-    // Ensure we have at least 3 session slots
+    // Ensure at least 3 session slots
     while (currentSessions.length < 3) {
       currentSessions.push({
         id: `session_${currentSessions.length + 1}`,
@@ -150,6 +159,8 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
         status: null
       });
     }
+
+    console.log('[RIGHT_CLICK] Opening modal with sessions:', currentSessions);
 
     setMultiSessionStudentName(student.name);
     setMultiSessionDate(dateKey);
@@ -160,30 +171,39 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
   };
 
   const handleSaveMultiSession = async (sessions: Array<{ id: string; name: string; status: 'P' | 'A' | 'L' | null }>) => {
-    if (selectedStudent === null || !multiSessionDate) return;
+    if (selectedStudent === null || !multiSessionDate) {
+      console.error('[MULTI_SESSION] Missing student or date');
+      return;
+    }
   
     try {
       const token = localStorage.getItem('access_token');
       if (!token) {
-        console.error('[MULTI_SESSION] No auth token found');
-        alert('Authentication error. Please login again.');
+        console.error('[MULTI_SESSION] No auth token');
+        alert('Please login again');
         return;
       }
   
-      // ✅ Log what we're about to send
-      console.log('[MULTI_SESSION] Preparing to send:');
-      console.log('  Student ID:', selectedStudent);
-      console.log('  Date:', multiSessionDate);
-      console.log('  Sessions:', JSON.stringify(sessions, null, 2));
+      console.log('[MULTI_SESSION] ═══════════════════════════════════');
+      console.log('[MULTI_SESSION] SAVING MULTI-SESSION ATTENDANCE');
+      console.log('[MULTI_SESSION] Student ID:', selectedStudent);
+      console.log('[MULTI_SESSION] Date:', multiSessionDate);
+      console.log('[MULTI_SESSION] Class ID:', activeClass.id);
+      console.log('[MULTI_SESSION] Mode:', activeClass.enrollment_mode);
+      console.log('[MULTI_SESSION] Sessions:', sessions);
   
-      // ✅ SEND ALL SESSIONS (including nulls) - backend filters them
+      // Prepare payload
       const payload = {
-        student_id: selectedStudent,
+        student_id: String(selectedStudent),
         date: multiSessionDate,
-        sessions: sessions  // ✅ Send everything!
+        sessions: sessions.map(s => ({
+          id: s.id,
+          name: s.name,
+          status: s.status
+        }))
       };
   
-      console.log('[MULTI_SESSION] Full payload:', JSON.stringify(payload, null, 2));
+      console.log('[MULTI_SESSION] Payload:', JSON.stringify(payload, null, 2));
   
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/classes/${activeClass.id}/multi-session-attendance`,
@@ -200,109 +220,107 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       console.log('[MULTI_SESSION] Response status:', response.status);
   
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        console.error('[MULTI_SESSION] Backend error:', errorData);
-        throw new Error(errorData.detail || `Backend returned ${response.status}`);
+        let errorMessage = 'Failed to save attendance';
+        try {
+          const errorData = await response.json();
+          console.error('[MULTI_SESSION] Error response:', errorData);
+          errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
+        } catch (e) {
+          const errorText = await response.text();
+          console.error('[MULTI_SESSION] Error text:', errorText);
+          errorMessage = errorText || `Server error ${response.status}`;
+        }
+        throw new Error(errorMessage);
       }
   
       const result = await response.json();
-      console.log('[MULTI_SESSION] ✅ Backend saved successfully:', result);
+      console.log('[MULTI_SESSION] ✅ Success:', result);
   
-      // ✅ Update local state with backend response
-      if (result.class) {
-        // Backend returned updated class - use it directly
-        onUpdateClassData(result.class);
-        console.log('[MULTI_SESSION] Updated from backend response');
-      } else {
-        // Fallback: Calculate locally if backend doesn't return full class
-        const validSessions = sessions.filter(s => s.status !== null);
-        
-        const updatedClass: Class = {
-          ...activeClass,
-          students: activeClass.students.map(student => {
-            if (student.id === selectedStudent) {
-              return {
-                ...student,
-                attendance: {
-                  ...student.attendance,
-                  [multiSessionDate]: {
-                    sessions: validSessions.map(s => ({
-                      id: s.id,
-                      name: s.name,
-                      status: s.status as 'P' | 'A' | 'L'
-                    })),
-                    updated_at: new Date().toISOString()
-                  }
+      // Update local state
+      const validSessions = sessions.filter(s => s.status !== null);
+      
+      const updatedClass: Class = {
+        ...activeClass,
+        students: activeClass.students.map(student => {
+          if (student.id === selectedStudent) {
+            const newAttendanceValue = validSessions.length > 0 
+              ? {
+                  sessions: validSessions.map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    status: s.status as 'P' | 'A' | 'L'
+                  })),
+                  updated_at: new Date().toISOString()
                 }
-              };
-            }
-            return student;
-          })
-        };
-  
-        // Recalculate statistics locally
-        const calculateLocalStats = () => {
-          let totalPresent = 0;
-          let totalAbsent = 0;
-          let totalLate = 0;
-          let total = 0;
-  
-          updatedClass.students.forEach(student => {
-            Object.values(student.attendance).forEach(dayData => {
-              if (dayData) {
-                if (typeof dayData === 'object' && 'sessions' in dayData) {
-                  dayData.sessions.forEach((session: any) => {
-                    total++;
-                    if (session.status === 'P') totalPresent++;
-                    else if (session.status === 'A') totalAbsent++;
-                    else if (session.status === 'L') totalLate++;
-                  });
-                } else if (typeof dayData === 'object' && 'status' in dayData) {
-                  const count = dayData.count || 1;
-                  total += count;
-                  if (dayData.status === 'P') totalPresent += count;
-                  else if (dayData.status === 'A') totalAbsent += count;
-                  else if (dayData.status === 'L') totalLate += count;
-                } else if (typeof dayData === 'string') {
-                  total++;
-                  if (dayData === 'P') totalPresent++;
-                  else if (dayData === 'A') totalAbsent++;
-                  else if (dayData === 'L') totalLate++;
-                }
+              : undefined;
+
+            return {
+              ...student,
+              attendance: {
+                ...student.attendance,
+                [multiSessionDate]: newAttendanceValue
               }
-            });
-          });
-  
-          const avgAttendance = total > 0 ? ((totalPresent + totalLate) / total * 100) : 0;
-  
-          return {
-            totalStudents: updatedClass.students.length,
-            avgAttendance: parseFloat(avgAttendance.toFixed(3)),
-            atRiskCount: 0,
-            excellentCount: 0
-          };
-        };
-  
-        updatedClass.statistics = calculateLocalStats();
-        onUpdateClassData(updatedClass);
-        console.log('[MULTI_SESSION] Updated from local calculation');
-      }
-  
-      // ✅ Close modal AFTER successful save
+            };
+          }
+          return student;
+        })
+      };
+
+      // Recalculate stats
+      let totalPresent = 0;
+      let totalAbsent = 0;
+      let totalLate = 0;
+      let total = 0;
+
+      updatedClass.students.forEach(student => {
+        Object.values(student.attendance).forEach(dayData => {
+          if (dayData) {
+            if (typeof dayData === 'object' && 'sessions' in dayData) {
+              dayData.sessions.forEach((session: any) => {
+                total++;
+                if (session.status === 'P') totalPresent++;
+                else if (session.status === 'A') totalAbsent++;
+                else if (session.status === 'L') totalLate++;
+              });
+            } else if (typeof dayData === 'object' && 'status' in dayData) {
+              const count = dayData.count || 1;
+              total += count;
+              if (dayData.status === 'P') totalPresent += count;
+              else if (dayData.status === 'A') totalAbsent += count;
+              else if (dayData.status === 'L') totalLate += count;
+            } else if (typeof dayData === 'string') {
+              total++;
+              if (dayData === 'P') totalPresent++;
+              else if (dayData === 'A') totalAbsent++;
+              else if (dayData === 'L') totalLate++;
+            }
+          }
+        });
+      });
+
+      const avgAttendance = total > 0 ? ((totalPresent + totalLate) / total * 100) : 0;
+
+      updatedClass.statistics = {
+        totalStudents: updatedClass.students.length,
+        avgAttendance: parseFloat(avgAttendance.toFixed(3)),
+        atRiskCount: 0,
+        excellentCount: 0
+      };
+
+      onUpdateClassData(updatedClass);
+      
+      console.log('[MULTI_SESSION] ✅ Local state updated');
+      console.log('[MULTI_SESSION] ═══════════════════════════════════\n');
+
+      // Close modal
       setShowMultiSessionModal(false);
       setSelectedDay(null);
       setSelectedStudent(null);
-  
-      console.log('[MULTI_SESSION] ✅ Save complete');
-  
+
     } catch (error) {
-      console.error('[MULTI_SESSION] ❌ Save failed:', error);
-      
-      // ✅ Show user-friendly error message
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`Failed to save attendance: ${errorMessage}\n\nPlease try again.`);
-      
-      // ✅ Don't close modal on error - let user retry
+      console.error('[MULTI_SESSION] ❌ FAILED:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to save attendance:\n\n${errorMessage}\n\nPlease try again.`);
     }
   };
     
