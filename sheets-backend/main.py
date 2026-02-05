@@ -2277,24 +2277,32 @@ async def get_qr_session(class_id: str, date: str, email: str = Depends(verify_t
     if not session or session["teacher_id"] != user["id"]:
         return {"active": False}
     
-    # ✅ FIX: Smooth rotation check with proper timezone handling
+    # ✅ FIX: Smooth rotation with proper timezone handling
+    import random
+    import string
+    
     rotation_interval = session.get("rotation_interval", 5)
     last_rotation_str = session.get("code_generated_at") or session.get("last_rotation") or session.get("started_at")
     
     try:
         # Parse timestamp (handle both Z and non-Z formats)
-        if last_rotation_str.endswith('Z'):
-            last_rotation_str = last_rotation_str[:-1]
-        last_rotation = datetime.fromisoformat(last_rotation_str)
+        if isinstance(last_rotation_str, str):
+            if last_rotation_str.endswith('Z'):
+                last_rotation_str = last_rotation_str[:-1]
+            last_rotation = datetime.fromisoformat(last_rotation_str)
+        else:
+            last_rotation = last_rotation_str
+        
+        # Make timezone-aware if needed
+        if last_rotation.tzinfo is None:
+            last_rotation = last_rotation.replace(tzinfo=timezone.utc)
         
         # Calculate elapsed time
         now = datetime.now(timezone.utc)
         elapsed_seconds = (now - last_rotation).total_seconds()
         
-        # Rotate if needed (with 0.5s buffer to prevent edge case glitches)
-        if elapsed_seconds >= (rotation_interval - 0.5):
-            import random
-            import string
+        # ✅ Rotate if interval passed (with 0.3s buffer to prevent edge cases)
+        if elapsed_seconds >= (rotation_interval - 0.3):
             new_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
             now_iso = now.isoformat()
             
@@ -2302,16 +2310,17 @@ async def get_qr_session(class_id: str, date: str, email: str = Depends(verify_t
             session["last_rotation"] = now_iso
             session["code_generated_at"] = now_iso
             
-            print(f"[QR_ROTATION] Code rotated: {new_code} (after {elapsed_seconds:.1f}s)")
+            # Update in memory
+            db.active_qr_sessions[session_key] = session
+            
+            print(f"[QR_ROTATION] ✅ Code rotated to: {new_code} (after {elapsed_seconds:.1f}s)")
         
     except Exception as e:
-        print(f"[QR_ROTATION] Error during rotation: {e}")
-    
-    # Update in memory
-    db.active_qr_sessions[session_key] = session
+        print(f"[QR_ROTATION] ⚠️ Rotation error: {e}")
+        # Don't crash - return current session
     
     return {"active": True, "session": session}
-
+    
 @app.post("/qr/scan")
 async def scan_qr_code(
     request: QRScanRequest,
