@@ -117,7 +117,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         }
     };
 
-    // ✅ SYNCHRONIZED TIMER - Uses backend's authoritative time
+    // Timer sync with backend - polls backend every 500ms
     useEffect(() => {
         if (!isActive) return;
 
@@ -137,28 +137,19 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
                 const session = data.session;
                 const serverCode = session.current_code;
-                const serverRotation = session.code_generated_at || session.last_rotation;
-                const serverInterval = Number(session.rotation_interval);
-
+                
                 // Update counts
                 setScannedCount(session.scanned_students?.length ?? 0);
                 setSessionNumber(session.session_number || 1);
 
-                // ✅ CRITICAL: Calculate time from server's authoritative timestamp
-                if (serverRotation) {
-                    const now = new Date();
-                    const rotationTime = new Date(serverRotation);
-                    const elapsedMs = now.getTime() - rotationTime.getTime();
-                    const elapsedSec = Math.floor(elapsedMs / 1000);
-                    const remaining = Math.max(0, serverInterval - elapsedSec);
-                    
-                    // Only update if significantly different (prevents jitter)
-                    setTimeLeft(prev => Math.abs(prev - remaining) > 1 ? remaining : prev);
+                // Use backend's time_remaining directly
+                if (session.time_remaining !== undefined) {
+                    setTimeLeft(session.time_remaining);
                 }
 
-                // ✅ Update QR code instantly when it changes
+                // Update QR code when it changes
                 if (serverCode !== currentCode) {
-                    setRotationInterval(serverInterval);
+                    setRotationInterval(Number(session.rotation_interval));
                     setCurrentCode(serverCode);
                     await generateQRCode(serverCode);
                 }
@@ -170,7 +161,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         // Initial poll
         pollSession();
 
-        // ✅ Poll every 500ms for smooth updates
+        // Poll every 500ms
         const pollInterval = setInterval(pollSession, 500);
 
         return () => clearInterval(pollInterval);
