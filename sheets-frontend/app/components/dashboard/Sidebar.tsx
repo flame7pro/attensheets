@@ -16,6 +16,7 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onLogout: () => void;
   onUpdateClassName: (id: number, newName: string) => void;
+  onManageDevices: () => void; // ✅ NEW PROP
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -30,6 +31,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   onLogout,
   onUpdateClassName,
+  onManageDevices, // ✅ NEW PROP
 }) => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -241,6 +243,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <LayoutDashboard className="w-4 h-4" />
                 Dashboard
+              </button>
+            )}
+
+            {/* ✅ NEW: Manage Student Devices Button */}
+            {classes.length > 0 && (
+              <button
+                onClick={onManageDevices}
+                className="w-full mt-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Users className="w-4 h-4" />
+                Manage Devices
               </button>
             )}
 
