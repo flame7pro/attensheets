@@ -795,7 +795,6 @@ export default function DashboardPage() {
           totalStudents={activeClass.students.length}
           currentDate={getTodayDate()}  // ✅ CORRECT
           onClose={() => setShowQRModal(false)}
-          onUpdateClassData={onUpdateClassData}
         />
       )}
 
