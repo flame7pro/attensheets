@@ -112,8 +112,6 @@ export const AuthForm: React.FC<AuthFormProps> = ({
         deviceInfo = fingerprint;
       }
 
-      const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
-      
       // Determine the correct endpoint
       const endpoint = selectedRole === 'student' 
         ? '/auth/student/login' 
@@ -156,7 +154,8 @@ export const AuthForm: React.FC<AuthFormProps> = ({
         const errorDetail = data.detail || 'Login failed';
 
         // Check for device-related errors
-        if (errorDetail.includes('NEW_DEVICE')) {
+        if (typeof errorDetail === 'string' && errorDetail.includes('NEW_DEVICE')) {
+          // Device request needed - don't show error, just open modal
           const parts = errorDetail.split('|');
           const remaining = parts.length > 1 ? parseInt(parts[1]) : 3;
           
@@ -164,14 +163,20 @@ export const AuthForm: React.FC<AuthFormProps> = ({
           setDeviceRequestEmail(formData.email);
           setNewDeviceInfo(deviceInfo);
           setShowDeviceRequestModal(true);
+          // Clear the error so it doesn't show in the main form
           setError('');
-        } else if (errorDetail.includes('DEVICE_ALREADY_LINKED')) {
+        } else if (typeof errorDetail === 'string' && errorDetail.includes('DEVICE_ALREADY_LINKED')) {
           setError('This device is already linked to another student account. Please use your registered device or contact support.');
-        } else if (errorDetail.includes('MONTHLY_LIMIT_REACHED')) {
+        } else if (typeof errorDetail === 'string' && errorDetail.includes('MONTHLY_LIMIT_REACHED')) {
           setError('You have reached the monthly limit of 3 device requests. Please try again next month or use your registered device.');
-        } else if (errorDetail.includes('Device fingerprinting required')) {
+        } else if (typeof errorDetail === 'string' && errorDetail.includes('PENDING_REQUEST_EXISTS')) {
+          setError('You already have a pending device request. Please wait for your teacher to review it.');
+        } else if (typeof errorDetail === 'string' && errorDetail.includes('Device fingerprinting required')) {
           setError('Device fingerprinting is required for student login. Please try again.');
+        } else if (typeof errorDetail === 'string' && errorDetail.includes('Account not verified')) {
+          setError('Please verify your email address before logging in. Check your inbox for the verification link.');
         } else {
+          // Generic error (invalid credentials, etc.)
           setError(errorDetail);
         }
       }
