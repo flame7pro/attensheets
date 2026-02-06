@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Smartphone, Trash2, Calendar, Shield, AlertCircle } from 'lucide-react';
+import { X, Smartphone, Calendar, Shield, AlertCircle } from 'lucide-react';
 
 interface TrustedDevice {
   id: string;
@@ -28,7 +28,6 @@ export const StudentDevicesModal: React.FC<StudentDevicesModalProps> = ({
   const [devices, setDevices] = useState<TrustedDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [removing, setRemoving] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -62,38 +61,6 @@ export const StudentDevicesModal: React.FC<StudentDevicesModalProps> = ({
     }
   };
 
-  const handleRemoveDevice = async (deviceId: string) => {
-    if (!confirm('Are you sure you want to remove this device? You will need teacher approval to add it again.')) {
-      return;
-    }
-
-    try {
-      setRemoving(deviceId);
-      
-      const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/student/devices/${deviceId}`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-
-      if (response.ok) {
-        await loadDevices();
-      } else {
-        setError('Failed to remove device');
-      }
-    } catch (err) {
-      console.error('Error removing device:', err);
-      setError('Failed to remove device');
-    } finally {
-      setRemoving(null);
-    }
-  };
-
   const formatDate = (dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString('en-US', {
@@ -122,7 +89,7 @@ export const StudentDevicesModal: React.FC<StudentDevicesModalProps> = ({
               </div>
               <div>
                 <h2 className="text-xl md:text-2xl font-bold text-white">My Trusted Devices</h2>
-                <p className="text-teal-100 text-sm mt-1">Manage your authorized devices</p>
+                <p className="text-teal-100 text-sm mt-1">View your authorized devices</p>
               </div>
             </div>
             <button
@@ -169,7 +136,7 @@ export const StudentDevicesModal: React.FC<StudentDevicesModalProps> = ({
                 <div>
                   <h3 className="text-sm font-semibold text-blue-900 mb-1">Device Security</h3>
                   <p className="text-xs text-blue-700 leading-relaxed">
-                    Only devices listed here can access your account. Removing a device will require teacher approval to add it back.
+                    Only devices listed here can access your account. To remove a device or add a new one, please contact your teacher.
                   </p>
                 </div>
               </div>
@@ -180,7 +147,7 @@ export const StudentDevicesModal: React.FC<StudentDevicesModalProps> = ({
                   key={device.id}
                   className="bg-gradient-to-br from-white to-slate-50 rounded-xl p-5 border border-slate-200 hover:border-teal-300 hover:shadow-md transition-all"
                 >
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-3">
                         <div className="w-10 h-10 bg-gradient-to-br from-teal-100 to-cyan-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -230,23 +197,20 @@ export const StudentDevicesModal: React.FC<StudentDevicesModalProps> = ({
                         <span>Total logins: <strong className="text-slate-700">{device.login_count}</strong></span>
                       </div>
                     </div>
-
-                    {/* Remove Button */}
-                    <button
-                      onClick={() => handleRemoveDevice(device.id)}
-                      disabled={removing === device.id}
-                      className="p-2 hover:bg-rose-50 rounded-lg transition-colors group disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
-                      title="Remove device"
-                    >
-                      {removing === device.id ? (
-                        <div className="w-5 h-5 border-2 border-rose-500 border-t-transparent rounded-full animate-spin"></div>
-                      ) : (
-                        <Trash2 className="w-5 h-5 text-slate-400 group-hover:text-rose-600 transition-colors" />
-                      )}
-                    </button>
                   </div>
                 </div>
               ))}
+
+              {/* Help Text */}
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-semibold text-amber-900 mb-1">Need to Change Devices?</h3>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    If you need to remove a device or add a new one, please contact your teacher. They can manage your device access from their dashboard.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </div>
