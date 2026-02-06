@@ -207,9 +207,18 @@ class MultiSessionAttendanceUpdate(BaseModel):
         extra = "allow"
 
 class DeviceRequestCreate(BaseModel):
+    email: EmailStr  # ✅ ADD THIS LINE
     device_id: str
     device_info: Dict[str, Any]
     reason: str
+    
+    @field_validator('reason')
+    def validate_reason(cls, v):
+        if len(v.strip()) < 10:
+            raise ValueError('Reason must be at least 10 characters long')
+        if len(v.strip()) > 200:
+            raise ValueError('Reason must not exceed 200 characters')
+        return v.strip()
 
 class DeviceRequestResponse(BaseModel):
     action: str  # "approve" or "reject"
@@ -1410,78 +1419,144 @@ async def delete_student_account(email: str = Depends(verify_token)):
 # ==================== DEVICE MANAGEMENT ENDPOINTS ====================
 
 @app.post("/student/request-device")
-async def request_device_access(request: DeviceRequestCreate, email: str = Depends(verify_token)):
+def request_device_access(request: DeviceRequestCreate):
     """
-    Student requests access from a new device.
-    Limited to 3 requests per month.
+    Submit a device access request (NO AUTHENTICATION REQUIRED)
+    This is called when a student tries to login from a new device.
     """
     try:
-        student = db.get_student_by_email(email)
+        print(f"\n{'='*60}")
+        print(f"[DEVICE_REQUEST] New request from {request.email}")
+        print(f"  Device ID: {request.device_id}")
+        print(f"  Reason: {request.reason}")
+        print(f"{'='*60}")
+        
+        # 1. Verify the student exists
+        student = db.get_student_by_email(request.email)
         if not student:
-            raise HTTPException(status_code=404, detail="Student not found")
+            print(f"[DEVICE_REQUEST] ❌ Student not found: {request.email}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Student account not found"
+            )
         
         student_id = student["id"]
+        print(f"[DEVICE_REQUEST] ✓ Student found: {student['name']} ({student_id})")
         
-        # Check if device is already linked to another student
+        # 2. Check if device is already trusted
+        trusted_devices = student.get("trusted_devices", [])
+        if any(d.get("id") == request.device_id for d in trusted_devices):
+            print(f"[DEVICE_REQUEST] ❌ Device already trusted")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This device is already trusted"
+            )
+        
+        # 3. Check if device is already linked to another student
         other_student = db.find_student_by_device(request.device_id)
         if other_student and other_student["id"] != student_id:
+            print(f"[DEVICE_REQUEST] ❌ Device linked to another student")
             raise HTTPException(
-                status_code=403,
-                detail="This device is already linked to another student account"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="DEVICE_ALREADY_LINKED|This device is already linked to another student account"
             )
         
-        # Check monthly limit
-        current_month = datetime.now(timezone.utc).strftime("%Y-%m")
-        last_request_month = student.get("last_request_month", "")
-        request_count = student.get("device_request_count", 0)
-        
-        if last_request_month == current_month and request_count >= 3:
-            raise HTTPException(
-                status_code=429,
-                detail="Device request limit reached. You can only request 3 new devices per month."
-            )
-        
-        # Create device request
-        request_data = {
+        # 4. Check for existing pending request
+        existing_requests = list(db.device_requests.find({
             "student_id": student_id,
-            "student_name": student["name"],
-            "student_email": email,
+            "device_id": request.device_id,
+            "status": "pending"
+        }))
+        
+        if existing_requests:
+            print(f"[DEVICE_REQUEST] ❌ Pending request exists")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="PENDING_REQUEST_EXISTS|You already have a pending request for this device"
+            )
+        
+        # 5. Check monthly limit (3 requests per month)
+        current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+        first_day_of_month = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        requests_this_month = db.device_requests.count_documents({
+            "student_id": student_id,
+            "created_at": {"$gte": first_day_of_month.isoformat()}
+        })
+        
+        if requests_this_month >= 3:
+            print(f"[DEVICE_REQUEST] ❌ Monthly limit reached: {requests_this_month}")
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="MONTHLY_LIMIT_REACHED|You have reached the monthly limit of 3 device requests"
+            )
+        
+        # 6. Find teacher - get from first enrollment
+        enrollments = db.get_student_enrollments(student_id)
+        teacher_id = None
+        teacher_name = "Unknown Teacher"
+        
+        if enrollments:
+            # Get teacher from first class
+            first_class_id = enrollments[0]["class_id"]
+            class_data = db.get_class_by_id(first_class_id)
+            if class_data:
+                teacher_id = class_data.get("teacher_id")
+                if teacher_id:
+                    teacher = db.get_user(teacher_id)
+                    if teacher:
+                        teacher_name = teacher.get("name", "Unknown Teacher")
+        
+        if not teacher_id:
+            print(f"[DEVICE_REQUEST] ⚠️ No enrollments found, finding any teacher")
+            # Find any teacher as fallback
+            all_teachers = list(db.users.find({"role": "teacher"}, {"_id": 0}).limit(1))
+            if all_teachers:
+                teacher = all_teachers[0]
+                teacher_id = teacher["id"]
+                teacher_name = teacher.get("name", "Unknown Teacher")
+            else:
+                teacher_id = "system"
+                teacher_name = "System Administrator"
+        
+        print(f"[DEVICE_REQUEST] ✓ Teacher: {teacher_name} ({teacher_id})")
+        
+        # 7. Create the device request using the manager method
+        request_id = db.create_device_request({
+            "student_id": student_id,
+            "student_name": student.get("name", "Unknown Student"),
+            "student_email": request.email,
+            "teacher_id": teacher_id,
+            "teacher_name": teacher_name,
             "device_id": request.device_id,
             "device_info": request.device_info,
             "reason": request.reason,
-            "status": "pending",
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }
+            "status": "pending"
+        })
         
-        request_id = db.create_device_request(request_data)
+        remaining_requests = 3 - (requests_this_month + 1)
         
-        # Update student's request count
-        if last_request_month != current_month:
-            db.update_student(student_id, {
-                "device_request_count": 1,
-                "last_request_month": current_month
-            })
-        else:
-            db.update_student(student_id, {
-                "device_request_count": request_count + 1
-            })
+        print(f"[DEVICE_REQUEST] ✅ Request created: {request_id}")
+        print(f"[DEVICE_REQUEST] Remaining requests: {remaining_requests}")
+        print(f"{'='*60}\n")
         
         return {
             "success": True,
             "message": "Device access request submitted successfully",
             "request_id": request_id,
-            "requests_remaining": 2 - request_count if last_request_month == current_month else 2
+            "remaining_requests": remaining_requests
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error creating device request: {e}")
+        print(f"[DEVICE_REQUEST] ❌ Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
-            status_code=500,
-            detail="Failed to create device request"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to submit device request"
         )
-
 
 @app.get("/teacher/device-requests")
 async def get_device_requests(email: str = Depends(verify_token)):
