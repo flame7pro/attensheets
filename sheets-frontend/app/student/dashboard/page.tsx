@@ -56,6 +56,7 @@ export default function StudentDashboard() {
   const [leaving, setLeaving] = useState(false);
   const [leaveError, setLeaveError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showDeviceRevokedModal, setShowDeviceRevokedModal] = useState(false);
   const getAttendanceStatus = (value: any): 'P' | 'A' | 'L' | undefined => {
     if (!value) return undefined;
 
@@ -149,20 +150,10 @@ export default function StudentDashboard() {
           );
           
           if (!isDeviceTrusted) {
-            console.log('[DEVICE_CHECK] ❌ Device no longer trusted! Logging out...');
+            console.log('[DEVICE_CHECK] ❌ Device no longer trusted! Showing modal...');
             
-            // Device was removed - force logout
-            alert('Your device access has been revoked by your teacher. You will be logged out.');
-            
-            // Clear all auth data
-            sessionStorage.clear();
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('user');
-            localStorage.removeItem('user_role');
-            localStorage.removeItem('remember_me');
-            
-            // Redirect to auth page
-            window.location.href = '/auth';
+            // ✅ Show modal instead of alert
+            setShowDeviceRevokedModal(true);
           } else {
             console.log('[DEVICE_CHECK] ✅ Device is still trusted');
           }
@@ -179,7 +170,7 @@ export default function StudentDashboard() {
     const intervalId = setInterval(checkDeviceTrust, 30000);
     
     return () => clearInterval(intervalId);
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user]);;
 
   useEffect(() => {
     if (isAuthenticated && user?.role === "student") {
@@ -351,6 +342,18 @@ export default function StudentDashboard() {
       totalAbsent: classes.reduce((sum, c) => sum + getCount(c.statistics?.absent), 0),
     };
   })() : null;
+
+  const handleDeviceRevokedLogout = () => {
+    // Clear all auth data
+    sessionStorage.clear();
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('user_role');
+    localStorage.removeItem('remember_me');
+    
+    // Redirect to auth page
+    window.location.href = '/auth';
+  };
 
   return (
     <div className="min-h-screen h-screen bg-gradient-to-br from-teal-50 via-cyan-50 to-blue-50 flex flex-col overflow-hidden">
@@ -711,5 +714,68 @@ export default function StudentDashboard() {
         onClose={() => setShowDevicesModal(false)}
       />
     </div>
+
+    {showDeviceRevokedModal && (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-rose-600 to-red-600 px-6 md:px-8 py-8">
+          <div className="flex flex-col items-center text-center">
+            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4">
+              <AlertCircle className="w-10 h-10 text-white" />
+            </div>
+            <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">
+              Device Access Revoked
+            </h2>
+            <p className="text-rose-50 text-sm">
+              You will be logged out
+            </p>
+          </div>
+        </div>
+  
+        {/* Content */}
+        <div className="p-6 md:p-8">
+          <div className="mb-6 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-r-lg">
+            <p className="text-amber-900 text-sm font-medium mb-1">
+              ⚠️ Security Notice
+            </p>
+            <p className="text-amber-800 text-sm">
+              Your teacher has removed this device from your trusted devices list.
+            </p>
+          </div>
+  
+          <div className="space-y-3 text-sm text-slate-700">
+            <p className="font-medium">What this means:</p>
+            <ul className="space-y-2 ml-4">
+              <li className="flex items-start gap-2">
+                <span className="text-rose-500 mt-1">•</span>
+                <span>You will be logged out immediately</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-rose-500 mt-1">•</span>
+                <span>This device can no longer access your account</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-teal-500 mt-1">•</span>
+                <span>Contact your teacher if you need to regain access</span>
+              </li>
+            </ul>
+          </div>
+  
+          {/* Action Button */}
+          <button
+            onClick={handleDeviceRevokedLogout}
+            className="w-full mt-6 px-6 py-3 bg-gradient-to-r from-rose-600 to-red-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
+          >
+            <span>Okay, Log Me Out</span>
+          </button>
+  
+          <p className="text-xs text-center text-slate-500 mt-4">
+            Need help? Contact your teacher or administrator
+          </p>
+        </div>
+      </div>
+    </div>
+  )}
   );
 }
