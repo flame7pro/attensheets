@@ -10,6 +10,7 @@ import { StudentEnrollmentModal } from '../../components/students/StudentEnrollm
 import { SettingsModal } from '../../components/dashboard/SettingsModal';
 import { ChangePasswordModal } from '../../components/dashboard/ChangePasswordModal';
 import { StudentQRScanner } from '../../components/StudentQRScanner';
+import { StudentDevicesModal } from '../../../components/StudentDevicesModal';
 
 interface ClassDetails {
   class_id: string;
@@ -41,7 +42,7 @@ interface ClassDetails {
 export default function StudentDashboard() {
   const router = useRouter();
   const { user, logout, isAuthenticated, loading: authLoading } = useAuth();
-
+  const [showDevicesModal, setShowDevicesModal] = useState(false);
   const [classes, setClasses] = useState<ClassDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -321,6 +322,7 @@ export default function StudentDashboard() {
           onSettings={() => setShowSettingsModal(true)}
           onLogout={handleLogout}
           onQRScan={() => setShowQRScanner(true)}
+          onManageDevices={() => setShowDevicesModal(true)}
         />
 
         <main className="flex-1 overflow-y-auto p-6">
@@ -601,6 +603,11 @@ export default function StudentDashboard() {
       <ChangePasswordModal
         isOpen={showChangePasswordModal}
         onClose={() => setShowChangePasswordModal(false)}
+      />
+
+      <StudentDevicesModal
+        isOpen={showDevicesModal}
+        onClose={() => setShowDevicesModal(false)}
       />
     </div>
   );
