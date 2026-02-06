@@ -1074,7 +1074,6 @@ class MongoDBManager:
             print(f"Error getting student devices for teacher: {e}")
             return []
 
-    
     def remove_student_device_by_teacher(self, teacher_id: str, student_id: str, device_id: str) -> bool:
         """
         Remove a device from a student's trusted devices (teacher action).
@@ -1111,6 +1110,10 @@ class MongoDBManager:
             )
             
             return result.modified_count > 0
+        
+        except Exception as e:  # ✅ ADD THIS
+            print(f"Error removing student device by teacher: {e}")
+            return False
     
     # ==================== QR SESSION OPERATIONS ====================
     
