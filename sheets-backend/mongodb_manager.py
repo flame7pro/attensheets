@@ -1023,6 +1023,94 @@ class MongoDBManager:
             print(f"Error getting pending device request count: {e}")
             return 0
 
+    def get_all_student_devices_for_teacher(self, teacher_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all devices for all students enrolled in teacher's classes.
+        Returns list of students with their devices.
+        """
+        try:
+            # Get all classes for this teacher
+            classes = list(self.classes.find({"teacher_id": teacher_id}, {"_id": 0, "id": 1}))
+            
+            if not classes:
+                return []
+            
+            # Get all class IDs (as strings for enrollment lookup)
+            class_ids = [str(cls["id"]) for cls in classes]
+            
+            # Get all enrolled student IDs across all classes
+            enrolled_student_ids = set()
+            enrollments = list(self.enrollments.find({
+                "class_id": {"$in": class_ids},
+                "status": "active"
+            }, {"_id": 0, "student_id": 1}))
+            
+            for enrollment in enrollments:
+                enrolled_student_ids.add(enrollment["student_id"])
+            
+            if not enrolled_student_ids:
+                return []
+            
+            # Get device info for each student
+            student_devices = []
+            for student_id in enrolled_student_ids:
+                student = self.students.find_one({"id": student_id}, {"_id": 0})
+                if student:
+                    devices = student.get("trusted_devices", [])
+                    if devices:  # Only include students who have devices
+                        student_devices.append({
+                            "student_id": student_id,
+                            "student_name": student.get("name", "Unknown"),
+                            "student_email": student.get("email", ""),
+                            "devices": devices
+                        })
+            
+            # Sort by student name
+            student_devices.sort(key=lambda x: x["student_name"].lower())
+            
+            return student_devices
+            
+        except Exception as e:
+            print(f"Error getting student devices for teacher: {e}")
+            return []
+
+    
+    def remove_student_device_by_teacher(self, teacher_id: str, student_id: str, device_id: str) -> bool:
+        """
+        Remove a device from a student's trusted devices (teacher action).
+        Validates that teacher has this student in their classes.
+        """
+        try:
+            # Verify teacher has this student
+            has_access = self.teacher_has_student(teacher_id, student_id)
+            if not has_access:
+                print(f"Teacher {teacher_id} does not have access to student {student_id}")
+                return False
+            
+            # Get student
+            student = self.students.find_one({"id": student_id}, {"_id": 0})
+            if not student:
+                print(f"Student {student_id} not found")
+                return False
+            
+            # Remove the device
+            trusted_devices = student.get("trusted_devices", [])
+            updated_devices = [d for d in trusted_devices if d.get("id") != device_id]
+            
+            if len(updated_devices) == len(trusted_devices):
+                print(f"Device {device_id} not found for student {student_id}")
+                return False
+            
+            # Update student
+            result = self.students.update_one(
+                {"id": student_id},
+                {"$set": {
+                    "trusted_devices": updated_devices,
+                    "updated_at": datetime.utcnow().isoformat()
+                }}
+            )
+            
+            return result.modified_count > 0
     
     # ==================== QR SESSION OPERATIONS ====================
     
