@@ -19,6 +19,7 @@ import { ImportDataState } from '../components/dashboard/ImportDataState';
 import { MonthYearSelector } from '../components/dashboard/MonthYearSelector';
 import { AttendanceThresholds, Student, CustomColumn, Class } from '@/types';
 import { QRAttendanceModal } from '../components/QRAttendanceModal';
+import { TeacherDeviceRequestsModal } from '../components/TeacherDeviceRequestsModal';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -35,6 +36,8 @@ export default function DashboardPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState('');
   const [showQRModal, setShowQRModal] = useState(false);
+  const [showDeviceRequestsModal, setShowDeviceRequestsModal] = useState(false);
+  const [pendingDeviceRequests, setPendingDeviceRequests] = useState(0);
   const getTodayDate = () => {
     const today = new Date();
     const year = today.getFullYear();
@@ -49,6 +52,28 @@ export default function DashboardPage() {
     atRisk: 85,
   });
 
+  const loadPendingDeviceRequests = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/teacher/device-requests`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+  
+      if (response.ok) {
+        const data = await response.json();
+        const pending = data.requests.filter((r: any) => r.status === 'pending').length;
+        setPendingDeviceRequests(pending);
+      }
+    } catch (error) {
+      console.error('Error loading device request count:', error);
+    }
+  };
+  
   const [showAddColumnModal, setShowAddColumnModal] = useState(false);
   const [showDeleteClassModal, setShowDeleteClassModal] = useState(false);
   const [showThresholdSettings, setShowThresholdSettings] = useState(false);
@@ -58,7 +83,7 @@ export default function DashboardPage() {
   const [classToDelete, setClassToDelete] = useState<Class | null>(null);
   const [newColumnLabel, setNewColumnLabel] = useState('');
   const [newColumnType, setNewColumnType] = useState<'text' | 'number' | 'select'>('text');
-
+  
   // Add this helper function in page.tsx
   const refreshClassData = async (classId: number) => {
     try {
@@ -88,6 +113,17 @@ export default function DashboardPage() {
       console.error('Failed to refresh class data:', error);
     }
   };
+
+  useEffect(() => {
+    if (user && isAuthenticated) {
+      loadPendingDeviceRequests();
+      
+      // Refresh every 30 seconds
+      const interval = setInterval(loadPendingDeviceRequests, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [user, isAuthenticated]);
+
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -694,6 +730,8 @@ export default function DashboardPage() {
           onOpenSettings={handleOpenSettings}
           onLogout={handleLogout}
           onUpdateClassName={handleUpdateClassName}
+          onOpenDeviceRequests={() => setShowDeviceRequestsModal(true)}
+          pendingDeviceRequests={pendingDeviceRequests}
         />
 
         <main className="flex-1 overflow-y-auto p-6">
@@ -838,6 +876,14 @@ export default function DashboardPage() {
       <ChangePasswordModal
         isOpen={showChangePasswordModal}
         onClose={() => setShowChangePasswordModal(false)}
+      />
+
+      <TeacherDeviceRequestsModal
+        isOpen={showDeviceRequestsModal}
+        onClose={() => {
+          setShowDeviceRequestsModal(false);
+          loadPendingDeviceRequests();
+        }}
       />
     </div>
   );
