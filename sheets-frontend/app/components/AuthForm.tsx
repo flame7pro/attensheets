@@ -5,6 +5,7 @@ import { Mail, Lock, Eye, EyeOff, UserPlus, LogIn, GraduationCap, Users, CheckCi
 import { useAuth } from '@/lib/auth-context-email';
 import { useRouter } from 'next/navigation';
 import { PasswordResetModal } from './PasswordResetModal';
+import { DeviceRequestModal } from './DeviceRequestModal';
 
 interface AuthFormProps {
   onModeChange?: (isSignUp: boolean) => void;
@@ -28,6 +29,10 @@ export const AuthForm: React.FC<AuthFormProps> = ({
   const [showResetModal, setShowResetModal] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [showDeviceRequestModal, setShowDeviceRequestModal] = useState(false);
+  const [newDeviceInfo, setNewDeviceInfo] = useState<any>(null);
+  const [remainingDeviceRequests, setRemainingDeviceRequests] = useState(3);
+  const [deviceRequestEmail, setDeviceRequestEmail] = useState('');
 
   // ✅ NEW: Device fingerprinting consent state (only for students)
   const [deviceConsentGiven, setDeviceConsentGiven] = useState(false);
@@ -88,36 +93,98 @@ export const AuthForm: React.FC<AuthFormProps> = ({
     }
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
+   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
-
+  
     if (!formData.email || !formData.password) {
       setError('Please fill in all fields');
       return;
     }
-
+  
     setLoading(true);
     try {
       // Pass the rememberMe state to the login function
       const result = await login(formData.email, formData.password, rememberMe);
-
+  
       if (result.success) {
         setSuccess('Login successful!');
         setIsRedirecting(true);
-
+  
         const userRole = result.role || result.user?.role || 'teacher';
         const redirectPath = userRole === 'student' ? '/student/dashboard' : '/dashboard';
-
+  
         setTimeout(() => {
           router.push(redirectPath);
         }, 1200);
       } else {
-        setError(result.message);
+        // Check if it's a device-related error for students
+        if (result.message.includes('NEW_DEVICE')) {
+          // Parse the remaining requests from the error message
+          const parts = result.message.split('|');
+          const remaining = parts.length > 1 ? parseInt(parts[1]) : 3;
+          
+          setRemainingDeviceRequests(remaining);
+          setDeviceRequestEmail(formData.email);
+          
+          // Get device fingerprint for the modal
+          const { getDeviceFingerprint } = await import('@/lib/deviceFingerprint');
+          const deviceInfo = await getDeviceFingerprint();
+          setNewDeviceInfo(deviceInfo);
+          
+          // Show device request modal
+          setShowDeviceRequestModal(true);
+          setError('');
+        } else if (result.message.includes('DEVICE_ALREADY_LINKED')) {
+          setError('This device is already linked to another student account. Please use your registered device or contact support.');
+        } else if (result.message.includes('MONTHLY_LIMIT_REACHED')) {
+          setError('You have reached the monthly limit of 3 device requests. Please try again next month or use your registered device.');
+        } else {
+          setError(result.message);
+        }
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeviceRequestSubmit = async (reason: string) => {
+    try {
+      const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
+      
+      // First, get a temporary token for this request
+      // (Student isn't logged in yet, so we need to handle this specially)
+      // For now, we'll use the device info directly
+      
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/student/request-device`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: deviceRequestEmail,
+            device_id: newDeviceInfo.id,
+            device_info: newDeviceInfo,
+            reason: reason
+          })
+        }
+      );
+  
+      if (response.ok) {
+        const data = await response.json();
+        setSuccess('Device access request submitted successfully! Your teacher will review it shortly.');
+        setShowDeviceRequestModal(false);
+        setNewDeviceInfo(null);
+        setFormData({ name: '', email: '', password: '', confirmPassword: '' });
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to submit request');
+      }
+    } catch (error: any) {
+      throw new Error(error.message || 'Failed to submit device request');
     }
   };
 
@@ -386,6 +453,19 @@ export const AuthForm: React.FC<AuthFormProps> = ({
       </div>
 
       <PasswordResetModal isOpen={showResetModal} onClose={() => setShowResetModal(false)} />
+
+      {showDeviceRequestModal && newDeviceInfo && (
+        <DeviceRequestModal
+          isOpen={showDeviceRequestModal}
+          onClose={() => {
+            setShowDeviceRequestModal(false);
+            setNewDeviceInfo(null);
+          }}
+          deviceInfo={newDeviceInfo}
+          remainingRequests={remainingDeviceRequests}
+          onSubmit={handleDeviceRequestSubmit}
+        />
+      )}
     </>
   );
 };
