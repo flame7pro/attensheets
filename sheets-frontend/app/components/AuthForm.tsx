@@ -190,6 +190,12 @@ export const AuthForm: React.FC<AuthFormProps> = ({
 
   const handleDeviceRequestSubmit = async (reason: string) => {
     try {
+      console.log('Submitting device request:', {
+        email: deviceRequestEmail,
+        device_id: newDeviceInfo.id,
+        reason: reason
+      });
+
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/student/request-device`,
         {
@@ -206,16 +212,32 @@ export const AuthForm: React.FC<AuthFormProps> = ({
         }
       );
 
+      const data = await response.json();
+      console.log('Device request response:', response.status, data);
+
       if (response.ok) {
         setSuccess('Device access request submitted successfully! Your teacher will review it shortly.');
         setShowDeviceRequestModal(false);
         setNewDeviceInfo(null);
         setFormData({ name: '', email: '', password: '', confirmPassword: '' });
       } else {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to submit request');
+        // Handle specific error cases
+        const errorDetail = data.detail || 'Failed to submit request';
+        
+        if (errorDetail.includes('PENDING_REQUEST_EXISTS')) {
+          throw new Error('You already have a pending request for this device. Please wait for teacher approval.');
+        } else if (errorDetail.includes('MONTHLY_LIMIT_REACHED')) {
+          throw new Error('You have reached the monthly limit of 3 device requests. Please try again next month.');
+        } else if (errorDetail.includes('DEVICE_ALREADY_LINKED')) {
+          throw new Error('This device is already linked to another student account.');
+        } else if (errorDetail.includes('verify your email')) {
+          throw new Error('Please verify your email address before requesting device access.');
+        } else {
+          throw new Error(errorDetail);
+        }
       }
     } catch (error: any) {
+      console.error('Device request error:', error);
       throw new Error(error.message || 'Failed to submit device request');
     }
   };
