@@ -1593,6 +1593,108 @@ async def respond_to_device_request(
             detail="Failed to process device request"
         )
 
+@app.get("/teacher/student-devices")
+async def get_all_student_devices(email: str = Depends(verify_token)):
+    """Get all devices for all students enrolled in teacher's classes"""
+    try:
+        user = db.get_user_by_email(email)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get all classes for this teacher
+        classes = db.get_all_classes(user["id"])
+        
+        if not classes:
+            return {"students": []}
+        
+        # Get all enrolled student IDs across all classes
+        enrolled_student_ids = set()
+        for cls in classes:
+            class_id = str(cls["id"])
+            enrollments = db.enrollments.find({"class_id": class_id, "status": "active"})
+            for enrollment in enrollments:
+                enrolled_student_ids.add(enrollment["student_id"])
+        
+        if not enrolled_student_ids:
+            return {"students": []}
+        
+        # Get device info for each student
+        student_devices = []
+        for student_id in enrolled_student_ids:
+            student = db.get_student(student_id)
+            if student:
+                devices = student.get("trusted_devices", [])
+                if devices:  # Only include students who have devices
+                    student_devices.append({
+                        "student_id": student_id,
+                        "student_name": student.get("name", "Unknown"),
+                        "student_email": student.get("email", ""),
+                        "devices": devices
+                    })
+        
+        # Sort by student name
+        student_devices.sort(key=lambda x: x["student_name"].lower())
+        
+        return {"students": student_devices}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching student devices: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch student devices"
+        )
+
+
+@app.delete("/teacher/student-devices/{student_id}/{device_id}")
+async def remove_student_device(
+    student_id: str,
+    device_id: str,
+    email: str = Depends(verify_token)
+):
+    """Remove a device from a student's trusted devices (teacher only)"""
+    try:
+        user = db.get_user_by_email(email)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Verify teacher has this student in their classes
+        has_access = db.teacher_has_student(user["id"], student_id)
+        
+        if not has_access:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to manage this student's devices"
+            )
+        
+        # Get student
+        student = db.get_student(student_id)
+        if not student:
+            raise HTTPException(status_code=404, detail="Student not found")
+        
+        # Remove the device
+        trusted_devices = student.get("trusted_devices", [])
+        updated_devices = [d for d in trusted_devices if d.get("id") != device_id]
+        
+        if len(updated_devices) == len(trusted_devices):
+            raise HTTPException(status_code=404, detail="Device not found")
+        
+        db.update_student(student_id, {"trusted_devices": updated_devices})
+        
+        return {
+            "success": True,
+            "message": "Device removed successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error removing device: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to remove device"
+        )
 
 @app.get("/student/devices")
 async def get_student_devices(email: str = Depends(verify_token)):
