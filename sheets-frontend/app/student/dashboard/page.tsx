@@ -716,66 +716,66 @@ export default function StudentDashboard() {
     </div>
 
     {showDeviceRevokedModal && (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-rose-600 to-red-600 px-6 md:px-8 py-8">
-          <div className="flex flex-col items-center text-center">
-            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4">
-              <AlertCircle className="w-10 h-10 text-white" />
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-rose-600 to-red-600 px-6 md:px-8 py-8">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4">
+                <AlertCircle className="w-10 h-10 text-white" />
+              </div>
+              <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">
+                Device Access Revoked
+              </h2>
+              <p className="text-rose-50 text-sm">
+                You will be logged out
+              </p>
             </div>
-            <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">
-              Device Access Revoked
-            </h2>
-            <p className="text-rose-50 text-sm">
-              You will be logged out
+          </div>
+    
+          {/* Content */}
+          <div className="p-6 md:p-8">
+            <div className="mb-6 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-r-lg">
+              <p className="text-amber-900 text-sm font-medium mb-1">
+                ⚠️ Security Notice
+              </p>
+              <p className="text-amber-800 text-sm">
+                Your teacher has removed this device from your trusted devices list.
+              </p>
+            </div>
+    
+            <div className="space-y-3 text-sm text-slate-700">
+              <p className="font-medium">What this means:</p>
+              <ul className="space-y-2 ml-4">
+                <li className="flex items-start gap-2">
+                  <span className="text-rose-500 mt-1">•</span>
+                  <span>You will be logged out immediately</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-rose-500 mt-1">•</span>
+                  <span>This device can no longer access your account</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-teal-500 mt-1">•</span>
+                  <span>Contact your teacher if you need to regain access</span>
+                </li>
+              </ul>
+            </div>
+    
+            {/* Action Button */}
+            <button
+              onClick={handleDeviceRevokedLogout}
+              className="w-full mt-6 px-6 py-3 bg-gradient-to-r from-rose-600 to-red-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <span>Okay, Log Me Out</span>
+            </button>
+    
+            <p className="text-xs text-center text-slate-500 mt-4">
+              Need help? Contact your teacher or administrator
             </p>
           </div>
-        </div>
-  
-        {/* Content */}
-        <div className="p-6 md:p-8">
-          <div className="mb-6 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-r-lg">
-            <p className="text-amber-900 text-sm font-medium mb-1">
-              ⚠️ Security Notice
-            </p>
-            <p className="text-amber-800 text-sm">
-              Your teacher has removed this device from your trusted devices list.
-            </p>
-          </div>
-  
-          <div className="space-y-3 text-sm text-slate-700">
-            <p className="font-medium">What this means:</p>
-            <ul className="space-y-2 ml-4">
-              <li className="flex items-start gap-2">
-                <span className="text-rose-500 mt-1">•</span>
-                <span>You will be logged out immediately</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-rose-500 mt-1">•</span>
-                <span>This device can no longer access your account</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-teal-500 mt-1">•</span>
-                <span>Contact your teacher if you need to regain access</span>
-              </li>
-            </ul>
-          </div>
-  
-          {/* Action Button */}
-          <button
-            onClick={handleDeviceRevokedLogout}
-            className="w-full mt-6 px-6 py-3 bg-gradient-to-r from-rose-600 to-red-600 text-white font-semibold rounded-xl hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-2"
-          >
-            <span>Okay, Log Me Out</span>
-          </button>
-  
-          <p className="text-xs text-center text-slate-500 mt-4">
-            Need help? Contact your teacher or administrator
-          </p>
         </div>
       </div>
-    </div>
-  )}
+    )}
   );
 }
