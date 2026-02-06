@@ -19,7 +19,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
   setVerificationEmail
 }) => {
   const router = useRouter();
-  const { signup, login } = useAuth();
+  const { signup } = useAuth();
   const [isSignUp, setIsSignUp] = useState(true);
   const [selectedRole, setSelectedRole] = useState<'teacher' | 'student'>('teacher');
   const [showPassword, setShowPassword] = useState(false);
@@ -33,8 +33,6 @@ export const AuthForm: React.FC<AuthFormProps> = ({
   const [newDeviceInfo, setNewDeviceInfo] = useState<any>(null);
   const [remainingDeviceRequests, setRemainingDeviceRequests] = useState(3);
   const [deviceRequestEmail, setDeviceRequestEmail] = useState('');
-
-  // ✅ NEW: Device fingerprinting consent state (only for students)
   const [deviceConsentGiven, setDeviceConsentGiven] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -64,7 +62,6 @@ export const AuthForm: React.FC<AuthFormProps> = ({
       return;
     }
 
-    // ✅ NEW: Check device consent for students
     if (selectedRole === 'student' && !deviceConsentGiven) {
       setError('Please agree to device fingerprinting to continue');
       return;
@@ -78,12 +75,11 @@ export const AuthForm: React.FC<AuthFormProps> = ({
       if (result.success) {
         setSuccess(result.message);
 
-        // Smooth transition to verification
         setTimeout(() => {
           setVerificationEmail(formData.email);
           setShowVerification(true);
           setFormData({ name: '', email: '', password: '', confirmPassword: '' });
-          setDeviceConsentGiven(false); // Reset consent
+          setDeviceConsentGiven(false);
         }, 800);
       } else {
         setError(result.message);
@@ -93,57 +89,95 @@ export const AuthForm: React.FC<AuthFormProps> = ({
     }
   };
 
-   const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
-  
+
     if (!formData.email || !formData.password) {
       setError('Please fill in all fields');
       return;
     }
-  
+
     setLoading(true);
     try {
-      // Pass the rememberMe state to the login function
-      const result = await login(formData.email, formData.password, rememberMe);
-  
-      if (result.success) {
+      // Get device fingerprint for students
+      let deviceId = null;
+      let deviceInfo = null;
+      
+      if (selectedRole === 'student') {
+        const { getDeviceFingerprint } = await import('@/lib/deviceFingerprint');
+        const fingerprint = await getDeviceFingerprint();
+        deviceId = fingerprint.id;
+        deviceInfo = fingerprint;
+      }
+
+      const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
+      
+      // Determine the correct endpoint
+      const endpoint = selectedRole === 'student' 
+        ? '/auth/student/login' 
+        : '/auth/login';
+      
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${endpoint}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: formData.email,
+            password: formData.password,
+            device_id: deviceId,
+            device_info: deviceInfo
+          })
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Success - store token
+        const storage = rememberMe ? localStorage : sessionStorage;
+        storage.setItem('access_token', data.access_token);
+        storage.setItem('user', JSON.stringify(data.user));
+
         setSuccess('Login successful!');
         setIsRedirecting(true);
-  
-        const userRole = result.role || result.user?.role || 'teacher';
-        const redirectPath = userRole === 'student' ? '/student/dashboard' : '/dashboard';
-  
+
+        const redirectPath = selectedRole === 'student' ? '/student/dashboard' : '/dashboard';
+
         setTimeout(() => {
           router.push(redirectPath);
         }, 1200);
       } else {
-        // Check if it's a device-related error for students
-        if (result.message.includes('NEW_DEVICE')) {
-          // Parse the remaining requests from the error message
-          const parts = result.message.split('|');
+        // Handle errors
+        const errorDetail = data.detail || 'Login failed';
+
+        // Check for device-related errors
+        if (errorDetail.includes('NEW_DEVICE')) {
+          const parts = errorDetail.split('|');
           const remaining = parts.length > 1 ? parseInt(parts[1]) : 3;
           
           setRemainingDeviceRequests(remaining);
           setDeviceRequestEmail(formData.email);
-          
-          // Get device fingerprint for the modal
-          const { getDeviceFingerprint } = await import('@/lib/deviceFingerprint');
-          const deviceInfo = await getDeviceFingerprint();
           setNewDeviceInfo(deviceInfo);
-          
-          // Show device request modal
           setShowDeviceRequestModal(true);
           setError('');
-        } else if (result.message.includes('DEVICE_ALREADY_LINKED')) {
+        } else if (errorDetail.includes('DEVICE_ALREADY_LINKED')) {
           setError('This device is already linked to another student account. Please use your registered device or contact support.');
-        } else if (result.message.includes('MONTHLY_LIMIT_REACHED')) {
+        } else if (errorDetail.includes('MONTHLY_LIMIT_REACHED')) {
           setError('You have reached the monthly limit of 3 device requests. Please try again next month or use your registered device.');
+        } else if (errorDetail.includes('Device fingerprinting required')) {
+          setError('Device fingerprinting is required for student login. Please try again.');
         } else {
-          setError(result.message);
+          setError(errorDetail);
         }
       }
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setError('An error occurred during login. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -151,12 +185,6 @@ export const AuthForm: React.FC<AuthFormProps> = ({
 
   const handleDeviceRequestSubmit = async (reason: string) => {
     try {
-      const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
-      
-      // First, get a temporary token for this request
-      // (Student isn't logged in yet, so we need to handle this specially)
-      // For now, we'll use the device info directly
-      
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/student/request-device`,
         {
@@ -172,9 +200,8 @@ export const AuthForm: React.FC<AuthFormProps> = ({
           })
         }
       );
-  
+
       if (response.ok) {
-        const data = await response.json();
         setSuccess('Device access request submitted successfully! Your teacher will review it shortly.');
         setShowDeviceRequestModal(false);
         setNewDeviceInfo(null);
@@ -193,22 +220,21 @@ export const AuthForm: React.FC<AuthFormProps> = ({
     setError('');
     setSuccess('');
     setRememberMe(false);
-    setDeviceConsentGiven(false); // Reset consent when switching modes
+    setDeviceConsentGiven(false);
     onModeChange?.(signUpMode);
   };
 
   const handleRoleChange = (role: 'teacher' | 'student') => {
     setSelectedRole(role);
-    setDeviceConsentGiven(false); // Reset consent when changing roles
-    setError(''); // Clear any existing errors
+    setDeviceConsentGiven(false);
+    setError('');
   };
 
-  // ✅ Check if signup button should be enabled
   const isSignupEnabled = () => {
     if (selectedRole === 'teacher') {
-      return true; // Teachers don't need device consent
+      return true;
     }
-    return deviceConsentGiven; // Students need device consent
+    return deviceConsentGiven;
   };
 
   return (
@@ -229,7 +255,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
 
       <div className={`bg-white rounded-2xl shadow-xl p-6 md:p-8 transition-opacity duration-500 ${isRedirecting ? 'opacity-0' : 'opacity-100'}`}>
         <div className="space-y-6">
-          {/* Tab Switcher with Animation */}
+          {/* Tab Switcher */}
           <div className="bg-slate-100 rounded-lg p-1 flex gap-1">
             <button
               onClick={() => handleModeChange(true)}
@@ -255,7 +281,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
             </button>
           </div>
 
-          {/* Role Selection with Staggered Animation */}
+          {/* Role Selection */}
           {isSignUp && (
             <div className="space-y-3 animate-slide-down">
               <label className="text-sm font-semibold text-slate-700">I am signing up as:</label>
@@ -303,7 +329,53 @@ export const AuthForm: React.FC<AuthFormProps> = ({
             </div>
           )}
 
-          {/* Messages with Slide Animation */}
+          {/* Role Selection for Sign In */}
+          {!isSignUp && (
+            <div className="space-y-3 animate-slide-down">
+              <label className="text-sm font-semibold text-slate-700">I am signing in as:</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => handleRoleChange('teacher')}
+                  className={`p-3 md:p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer transform hover:scale-105 ${selectedRole === 'teacher'
+                      ? 'border-emerald-500 bg-emerald-50 shadow-lg'
+                      : 'border-slate-200 hover:border-emerald-300 hover:shadow'
+                    }`}
+                >
+                  <GraduationCap
+                    className={`w-5 h-5 md:w-6 md:h-6 mx-auto mb-2 transition-colors ${selectedRole === 'teacher' ? 'text-emerald-600' : 'text-slate-400'
+                      }`}
+                  />
+                  <p
+                    className={`font-semibold text-xs md:text-sm transition-colors ${selectedRole === 'teacher' ? 'text-emerald-700' : 'text-slate-600'
+                      }`}
+                  >
+                    Teacher
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => handleRoleChange('student')}
+                  className={`p-3 md:p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer transform hover:scale-105 ${selectedRole === 'student'
+                      ? 'border-teal-500 bg-teal-50 shadow-lg'
+                      : 'border-slate-200 hover:border-teal-300 hover:shadow'
+                    }`}
+                >
+                  <Users
+                    className={`w-5 h-5 md:w-6 md:h-6 mx-auto mb-2 transition-colors ${selectedRole === 'student' ? 'text-teal-600' : 'text-slate-400'
+                      }`}
+                  />
+                  <p
+                    className={`font-semibold text-xs md:text-sm transition-colors ${selectedRole === 'student' ? 'text-teal-700' : 'text-slate-600'
+                      }`}
+                  >
+                    Student
+                  </p>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Messages */}
           {error && (
             <div className="p-3 md:p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm animate-slide-down">
               {error}
@@ -361,7 +433,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
               />
             )}
 
-            {/* ✅ NEW: Device Fingerprinting Consent (Only for Student Sign Up) */}
+            {/* Device Fingerprinting Consent (Only for Student Sign Up) */}
             {isSignUp && selectedRole === 'student' && (
               <div className="animate-slide-down bg-blue-50 border-2 border-blue-200 rounded-xl p-4 space-y-3">
                 <div className="flex items-start gap-3">
