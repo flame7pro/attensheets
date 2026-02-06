@@ -30,6 +30,7 @@ class MongoDBManager:
             self.attendance_sessions = self.db['attendance_sessions']
             self.verification_codes = self.db['verification_codes']
             self.password_reset_codes = self.db['password_reset_codes']
+            self.device_requests = self.db['device_requests']  # ✅ NEW COLLECTION
             
             # Create indexes for better performance
             self._create_indexes()
@@ -902,6 +903,126 @@ class MongoDBManager:
             "thresholds": thresholds,
             "statistics": statistics
         }
+
+        # ==================== DEVICE MANAGEMENT METHODS ====================
+    
+    def find_student_by_device(self, device_id: str) -> Optional[Dict[str, Any]]:
+        """Find a student by device ID"""
+        try:
+            student = self.students.find_one(
+                {"trusted_devices.id": device_id},
+                {"_id": 0}
+            )
+            return student
+        except Exception as e:
+            print(f"Error finding student by device: {e}")
+            return None
+    
+    def create_device_request(self, request_data: Dict[str, Any]) -> str:
+        """Create a new device request"""
+        try:
+            request_id = f"req_{int(datetime.utcnow().timestamp())}_{request_data['student_id']}"
+            request_data["id"] = request_id
+            request_data["created_at"] = datetime.utcnow().isoformat()
+            
+            self.device_requests.insert_one(request_data)
+            return request_id
+        except Exception as e:
+            print(f"Error creating device request: {e}")
+            raise
+    
+    def get_device_request(self, request_id: str) -> Optional[Dict[str, Any]]:
+        """Get a device request by ID"""
+        try:
+            request = self.device_requests.find_one({"id": request_id}, {"_id": 0})
+            return request
+        except Exception as e:
+            print(f"Error getting device request: {e}")
+            return None
+    
+    def get_device_requests_for_students(self, student_ids: List[str]) -> List[Dict[str, Any]]:
+        """Get all pending device requests for a list of students"""
+        try:
+            requests = list(self.device_requests.find(
+                {
+                    "student_id": {"$in": student_ids},
+                    "status": "pending"
+                },
+                {"_id": 0}
+            ).sort("created_at", -1))
+            
+            return requests
+        except Exception as e:
+            print(f"Error getting device requests: {e}")
+            return []
+    
+    def update_device_request(self, request_id: str, updates: Dict[str, Any]) -> bool:
+        """Update a device request"""
+        try:
+            result = self.device_requests.update_one(
+                {"id": request_id},
+                {"$set": updates}
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            print(f"Error updating device request: {e}")
+            return False
+    
+    def teacher_has_student(self, teacher_id: str, student_id: str) -> bool:
+        """Check if a teacher has a specific student in any of their classes"""
+        try:
+            # Get all classes for this teacher
+            classes = list(self.classes.find({"teacher_id": teacher_id}, {"_id": 0, "id": 1}))
+            
+            if not classes:
+                return False
+            
+            # Check if student is enrolled in any of these classes
+            class_ids = [str(cls["id"]) for cls in classes]
+            
+            enrollment = self.enrollments.find_one({
+                "class_id": {"$in": class_ids},
+                "student_id": student_id,
+                "status": "active"
+            })
+            
+            return enrollment is not None
+        except Exception as e:
+            print(f"Error checking teacher-student relationship: {e}")
+            return False
+    
+    def get_pending_device_request_count(self, teacher_id: str) -> int:
+        """Get count of pending device requests for a teacher's students"""
+        try:
+            # Get all classes for this teacher
+            classes = list(self.classes.find({"teacher_id": teacher_id}, {"_id": 0, "id": 1}))
+            
+            if not classes:
+                return 0
+            
+            # Get all enrolled student IDs
+            class_ids = [str(cls["id"]) for cls in classes]
+            enrollments = list(self.enrollments.find(
+                {"class_id": {"$in": class_ids}, "status": "active"},
+                {"_id": 0, "student_id": 1}
+            ))
+            
+            student_ids = [e["student_id"] for e in enrollments]
+            
+            if not student_ids:
+                return 0
+            
+            # Count pending requests
+            count = self.device_requests.count_documents({
+                "student_id": {"$in": student_ids},
+                "status": "pending"
+            })
+            
+            return count
+        except Exception as e:
+            print(f"Error getting pending device request count: {e}")
+            return 0
+
     
     # ==================== QR SESSION OPERATIONS ====================
     
