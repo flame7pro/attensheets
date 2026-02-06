@@ -100,7 +100,11 @@ export const AuthForm: React.FC<AuthFormProps> = ({
     }
 
     setLoading(true);
+    
     try {
+      console.log('[LOGIN] Starting login process...');
+      console.log('[LOGIN] Role:', selectedRole);
+      
       // Get device fingerprint for students
       let deviceId = null;
       let deviceInfo = null;
@@ -110,12 +114,15 @@ export const AuthForm: React.FC<AuthFormProps> = ({
         const fingerprint = await getDeviceFingerprint();
         deviceId = fingerprint.id;
         deviceInfo = fingerprint;
+        console.log('[LOGIN] Device fingerprint obtained:', deviceId.substring(0, 20) + '...');
       }
 
       // Determine the correct endpoint
       const endpoint = selectedRole === 'student' 
         ? '/auth/student/login' 
         : '/auth/login';
+      
+      console.log('[LOGIN] Calling endpoint:', endpoint);
       
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}${endpoint}`,
@@ -133,55 +140,111 @@ export const AuthForm: React.FC<AuthFormProps> = ({
         }
       );
 
-      const data = await response.json();
+      console.log('[LOGIN] Response status:', response.status);
 
-      if (response.ok) {
-        // Success - store token
+      const data = await response.json();
+      console.log('[LOGIN] Response data:', data);
+
+      // ✅ CRITICAL FIX: Check for successful response FIRST
+      if (response.ok && data.access_token) {
+        console.log('✅ [LOGIN] Login successful! Token received');
+        
+        // Store token and user data
         const storage = rememberMe ? localStorage : sessionStorage;
         storage.setItem('access_token', data.access_token);
         storage.setItem('user', JSON.stringify(data.user));
+        storage.setItem('user_role', selectedRole);
+
+        // Also store in the other storage for session persistence
+        if (rememberMe) {
+          sessionStorage.setItem('access_token', data.access_token);
+          sessionStorage.setItem('user', JSON.stringify(data.user));
+          sessionStorage.setItem('user_role', selectedRole);
+        }
 
         setSuccess('Login successful!');
         setIsRedirecting(true);
 
-        const redirectPath = selectedRole === 'student' ? '/student/dashboard' : '/dashboard';
+        // Redirect based on role
+        const redirectPath = selectedRole === 'student' 
+          ? '/student/dashboard' 
+          : '/dashboard';
+
+        console.log('[LOGIN] Redirecting to:', redirectPath);
 
         setTimeout(() => {
           router.push(redirectPath);
         }, 1200);
-      } else {
-        // Handle errors
-        const errorDetail = data.detail || 'Login failed';
+        
+        return; // ✅ IMPORTANT: Exit here on success
+      }
 
-        // Check for device-related errors
-        if (typeof errorDetail === 'string' && errorDetail.includes('NEW_DEVICE')) {
-          // Device request needed - don't show error, just open modal
+      // ❌ Handle error responses
+      console.log('❌ [LOGIN] Login failed');
+      
+      const errorDetail = data.detail || 'Login failed';
+      console.log('[LOGIN] Error detail:', errorDetail);
+
+      // Check for device-related errors
+      if (typeof errorDetail === 'string') {
+        
+        // NEW DEVICE - needs approval
+        if (errorDetail.includes('NEW_DEVICE')) {
           const parts = errorDetail.split('|');
           const remaining = parts.length > 1 ? parseInt(parts[1]) : 3;
+          
+          console.log(`[LOGIN] New device detected - ${remaining} requests remaining`);
           
           setRemainingDeviceRequests(remaining);
           setDeviceRequestEmail(formData.email);
           setNewDeviceInfo(deviceInfo);
           setShowDeviceRequestModal(true);
-          // Clear the error so it doesn't show in the main form
-          setError('');
-        } else if (typeof errorDetail === 'string' && errorDetail.includes('DEVICE_ALREADY_LINKED')) {
+          setError(''); // Clear error
+          return;
+        }
+        
+        // DEVICE ALREADY LINKED
+        if (errorDetail.includes('DEVICE_ALREADY_LINKED')) {
           setError('This device is already linked to another student account. Please use your registered device or contact support.');
-        } else if (typeof errorDetail === 'string' && errorDetail.includes('MONTHLY_LIMIT_REACHED')) {
+          return;
+        }
+        
+        // MONTHLY LIMIT REACHED
+        if (errorDetail.includes('MONTHLY_LIMIT_REACHED')) {
           setError('You have reached the monthly limit of 3 device requests. Please try again next month or use your registered device.');
-        } else if (typeof errorDetail === 'string' && errorDetail.includes('PENDING_REQUEST_EXISTS')) {
+          return;
+        }
+        
+        // PENDING REQUEST EXISTS
+        if (errorDetail.includes('PENDING_REQUEST')) {
           setError('You already have a pending device request. Please wait for your teacher to review it.');
-        } else if (typeof errorDetail === 'string' && errorDetail.includes('Device fingerprinting required')) {
+          return;
+        }
+        
+        // DEVICE REJECTED
+        if (errorDetail.includes('DEVICE_REJECTED')) {
+          setError('Your device access request was denied. Please contact your teacher or use your registered device.');
+          return;
+        }
+        
+        // DEVICE FINGERPRINTING REQUIRED
+        if (errorDetail.includes('Device fingerprinting required')) {
           setError('Device fingerprinting is required for student login. Please try again.');
-        } else if (typeof errorDetail === 'string' && errorDetail.includes('Account not verified')) {
+          return;
+        }
+        
+        // ACCOUNT NOT VERIFIED
+        if (errorDetail.includes('Account not verified')) {
           setError('Please verify your email address before logging in. Check your inbox for the verification link.');
-        } else {
-          // Generic error (invalid credentials, etc.)
-          setError(errorDetail);
+          return;
         }
       }
+      
+      // Generic error (invalid credentials, etc.)
+      setError(typeof errorDetail === 'string' ? errorDetail : 'Invalid email or password');
+      
     } catch (err: any) {
-      console.error('Login error:', err);
+      console.error('[LOGIN] Exception:', err);
       setError('An error occurred during login. Please try again.');
     } finally {
       setLoading(false);
@@ -190,7 +253,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
 
   const handleDeviceRequestSubmit = async (reason: string) => {
     try {
-      console.log('Submitting device request:', {
+      console.log('[DEVICE_REQUEST] Submitting request:', {
         email: deviceRequestEmail,
         device_id: newDeviceInfo.id,
         reason: reason
@@ -213,7 +276,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
       );
 
       const data = await response.json();
-      console.log('Device request response:', response.status, data);
+      console.log('[DEVICE_REQUEST] Response:', response.status, data);
 
       if (response.ok) {
         setSuccess('Device access request submitted successfully! Your teacher will review it shortly.');
@@ -221,7 +284,6 @@ export const AuthForm: React.FC<AuthFormProps> = ({
         setNewDeviceInfo(null);
         setFormData({ name: '', email: '', password: '', confirmPassword: '' });
       } else {
-        // Handle specific error cases
         const errorDetail = data.detail || 'Failed to submit request';
         
         if (errorDetail.includes('PENDING_REQUEST_EXISTS')) {
@@ -237,7 +299,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
         }
       }
     } catch (error: any) {
-      console.error('Device request error:', error);
+      console.error('[DEVICE_REQUEST] Error:', error);
       throw new Error(error.message || 'Failed to submit device request');
     }
   };
