@@ -145,36 +145,46 @@ export const AuthForm: React.FC<AuthFormProps> = ({
       const data = await response.json();
       console.log('[LOGIN] Response data:', data);
 
-      // ✅ CRITICAL FIX: Check for successful response FIRST
+      // ✅ Check for successful response FIRST
       if (response.ok && data.access_token) {
         console.log('✅ [LOGIN] Login successful! Token received');
         
-        // Store token and user data
+        // ✅ CRITICAL FIX: Store everything FIRST, then redirect WITHOUT using router
         const storage = rememberMe ? localStorage : sessionStorage;
+        
+        // Store in primary storage
         storage.setItem('access_token', data.access_token);
         storage.setItem('user', JSON.stringify(data.user));
         storage.setItem('user_role', selectedRole);
 
-        // Also store in the other storage for session persistence
-        if (rememberMe) {
-          sessionStorage.setItem('access_token', data.access_token);
-          sessionStorage.setItem('user', JSON.stringify(data.user));
-          sessionStorage.setItem('user_role', selectedRole);
-        }
+        // ALWAYS store in sessionStorage for immediate access
+        sessionStorage.setItem('access_token', data.access_token);
+        sessionStorage.setItem('user', JSON.stringify(data.user));
+        sessionStorage.setItem('user_role', selectedRole);
+        
+        // Also store in localStorage for persistence
+        localStorage.setItem('access_token', data.access_token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        localStorage.setItem('user_role', selectedRole);
+        localStorage.setItem('remember_me', rememberMe.toString());
+
+        console.log('[LOGIN] ✅ All data stored successfully');
 
         setSuccess('Login successful!');
         setIsRedirecting(true);
 
-        // Redirect based on role
+        // Redirect path
         const redirectPath = selectedRole === 'student' 
           ? '/student/dashboard' 
           : '/dashboard';
 
         console.log('[LOGIN] Redirecting to:', redirectPath);
 
+        // ✅ CRITICAL FIX: Use window.location instead of router.push
+        // This forces a full page reload with the new auth state
         setTimeout(() => {
-          router.push(redirectPath);
-        }, 1200);
+          window.location.href = redirectPath;
+        }, 800);
         
         return; // ✅ IMPORTANT: Exit here on success
       }
@@ -631,7 +641,7 @@ export const AuthForm: React.FC<AuthFormProps> = ({
   );
 };
 
-// FormField and PasswordField components
+// FormField and PasswordField components remain the same...
 interface FormFieldProps {
   label: string;
   type: string;
