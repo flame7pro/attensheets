@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Plus, X, BarChart3, Settings, FileText, Users, LayoutDashboard, LogOut, Edit2, Check, GraduationCap } from 'lucide-react';
+import { Plus, X, BarChart3, Settings, FileText, Users, LayoutDashboard, LogOut, Edit2, Check, GraduationCap, Smartphone } from 'lucide-react';
 import { Class, Student, CustomColumn } from '@/types';
 
 interface SidebarProps {
@@ -16,6 +16,8 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onLogout: () => void;
   onUpdateClassName: (id: number, newName: string) => void;
+  onOpenDeviceRequests: () => void;
+  pendingDeviceRequests?: number; 
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -243,7 +245,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 Dashboard
               </button>
             )}
-
+            
+            {/* Device Requests Button */}
+            {classes.length > 0 && (
+              <button
+                onClick={onOpenDeviceRequests}
+                className="w-full mt-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer relative"
+              >
+                <Smartphone className="w-4 h-4" />
+                Device Requests
+                {pendingDeviceRequests && pendingDeviceRequests > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-xs font-bold rounded-full flex items-center justify-center shadow-lg">
+                    {pendingDeviceRequests}
+                  </span>
+                )}
+              </button>
+            )}
 
             {/* Empty State */}
             {classes.length === 0 && (
