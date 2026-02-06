@@ -206,6 +206,14 @@ class MultiSessionAttendanceUpdate(BaseModel):
     class Config:
         extra = "allow"
 
+class DeviceRequestCreate(BaseModel):
+    device_id: str
+    device_info: Dict[str, Any]
+    reason: str
+
+class DeviceRequestResponse(BaseModel):
+    action: str  # "approve" or "reject"
+
 # ==================== HELPER FUNCTIONS ====================
 
 def get_current_session_number_for_date(class_data: dict, date: str) -> int:
@@ -1275,7 +1283,7 @@ async def verify_student_email(request: VerifyEmailRequest):
 async def student_login(request: LoginRequest):
     """
     Login STUDENT - Device fingerprinting required.
-    BLOCKS login from untrusted devices - NO verification codes.
+    If untrusted device: suggest device request flow
     """
     user = db.get_student_by_email(request.email)
     if not user:
@@ -1290,26 +1298,55 @@ async def student_login(request: LoginRequest):
             detail="Invalid email or password"
         )
     
-    # 🔐 CHECK DEVICE FINGERPRINT - HARD BLOCK if not trusted
+    # 🔐 CHECK DEVICE FINGERPRINT
     if request.device_id and request.device_info:
         if not is_trusted_device(user, request.device_id):
-            # 🚨 NEW DEVICE DETECTED - BLOCK LOGIN (NO CODE SENT)
-            print(f"🚨 NEW DEVICE LOGIN BLOCKED (STUDENT): {request.email}")
+            # NEW DEVICE DETECTED
+            print(f"🚨 NEW DEVICE LOGIN ATTEMPT (STUDENT): {request.email}")
             print(f"   Device: {request.device_info.get('name')}")
             print(f"   ID: {request.device_id}")
-            print(f"   ❌ Login denied - untrusted device")
             
-            # Send alert email to student (informational only)
+            # Check if device is linked to another student
+            other_student = db.find_student_by_device(request.device_id)
+            if other_student and other_student["id"] != user["id"]:
+                send_untrusted_device_alert(
+                    request.email,
+                    user["name"],
+                    request.device_info
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="DEVICE_ALREADY_LINKED"
+                )
+            
+            # Check monthly request limit
+            current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+            last_request_month = user.get("last_request_month", "")
+            request_count = user.get("device_request_count", 0)
+            
+            if last_request_month == current_month and request_count >= 3:
+                send_untrusted_device_alert(
+                    request.email,
+                    user["name"],
+                    request.device_info
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="MONTHLY_LIMIT_REACHED"
+                )
+            
+            # Device request is possible
             send_untrusted_device_alert(
                 request.email,
                 user["name"],
                 request.device_info
             )
             
-            # BLOCK LOGIN - No verification option
+            remaining_requests = 3 - request_count if last_request_month == current_month else 3
+            
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Login from new device not authorized. Please use a trusted device or contact your administrator."
+                detail=f"NEW_DEVICE|{remaining_requests}"
             )
         else:
             # Trusted device - allow login
@@ -1368,6 +1405,248 @@ async def delete_student_account(email: str = Depends(verify_token)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete student account"
+        )
+
+# ==================== DEVICE MANAGEMENT ENDPOINTS ====================
+
+@app.post("/student/request-device")
+async def request_device_access(request: DeviceRequestCreate, email: str = Depends(verify_token)):
+    """
+    Student requests access from a new device.
+    Limited to 3 requests per month.
+    """
+    try:
+        student = db.get_student_by_email(email)
+        if not student:
+            raise HTTPException(status_code=404, detail="Student not found")
+        
+        student_id = student["id"]
+        
+        # Check if device is already linked to another student
+        other_student = db.find_student_by_device(request.device_id)
+        if other_student and other_student["id"] != student_id:
+            raise HTTPException(
+                status_code=403,
+                detail="This device is already linked to another student account"
+            )
+        
+        # Check monthly limit
+        current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+        last_request_month = student.get("last_request_month", "")
+        request_count = student.get("device_request_count", 0)
+        
+        if last_request_month == current_month and request_count >= 3:
+            raise HTTPException(
+                status_code=429,
+                detail="Device request limit reached. You can only request 3 new devices per month."
+            )
+        
+        # Create device request
+        request_data = {
+            "student_id": student_id,
+            "student_name": student["name"],
+            "student_email": email,
+            "device_id": request.device_id,
+            "device_info": request.device_info,
+            "reason": request.reason,
+            "status": "pending",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        request_id = db.create_device_request(request_data)
+        
+        # Update student's request count
+        if last_request_month != current_month:
+            db.update_student(student_id, {
+                "device_request_count": 1,
+                "last_request_month": current_month
+            })
+        else:
+            db.update_student(student_id, {
+                "device_request_count": request_count + 1
+            })
+        
+        return {
+            "success": True,
+            "message": "Device access request submitted successfully",
+            "request_id": request_id,
+            "requests_remaining": 2 - request_count if last_request_month == current_month else 2
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating device request: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create device request"
+        )
+
+
+@app.get("/teacher/device-requests")
+async def get_device_requests(email: str = Depends(verify_token)):
+    """Get all pending device requests for teacher's students"""
+    try:
+        user = db.get_user_by_email(email)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get all classes for this teacher
+        classes = db.get_all_classes(user["id"])
+        
+        # Get all enrolled student IDs across all classes
+        enrolled_student_ids = set()
+        for cls in classes:
+            enrollments = db.enrollments.find({"class_id": str(cls["id"]), "status": "active"})
+            for enrollment in enrollments:
+                enrolled_student_ids.add(enrollment["student_id"])
+        
+        # Get device requests for these students
+        requests = db.get_device_requests_for_students(list(enrolled_student_ids))
+        
+        return {"requests": requests}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching device requests: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch device requests"
+        )
+
+
+@app.post("/teacher/device-requests/{request_id}/respond")
+async def respond_to_device_request(
+    request_id: str,
+    response: DeviceRequestResponse,
+    email: str = Depends(verify_token)
+):
+    """Approve or reject a device request"""
+    try:
+        user = db.get_user_by_email(email)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get the request
+        request_data = db.get_device_request(request_id)
+        if not request_data:
+            raise HTTPException(status_code=404, detail="Request not found")
+        
+        if request_data["status"] != "pending":
+            raise HTTPException(status_code=400, detail="Request already processed")
+        
+        # Verify teacher has this student in their classes
+        student_id = request_data["student_id"]
+        has_access = db.teacher_has_student(user["id"], student_id)
+        
+        if not has_access:
+            raise HTTPException(
+                status_code=403,
+                detail="You don't have permission to respond to this request"
+            )
+        
+        if response.action == "approve":
+            # Add device to student's trusted devices
+            student = db.get_student(student_id)
+            if student:
+                device_info = request_data["device_info"]
+                device_info["approved_by"] = user["name"]
+                device_info["approved_at"] = datetime.now(timezone.utc).isoformat()
+                
+                add_trusted_device(student_id, device_info)
+                
+                # Update request status
+                db.update_device_request(request_id, {
+                    "status": "approved",
+                    "approved_by": user["id"],
+                    "approved_by_name": user["name"],
+                    "processed_at": datetime.now(timezone.utc).isoformat()
+                })
+                
+                return {
+                    "success": True,
+                    "message": "Device access approved",
+                    "action": "approved"
+                }
+        else:
+            # Reject request
+            db.update_device_request(request_id, {
+                "status": "rejected",
+                "rejected_by": user["id"],
+                "rejected_by_name": user["name"],
+                "processed_at": datetime.now(timezone.utc).isoformat()
+            })
+            
+            return {
+                "success": True,
+                "message": "Device access rejected",
+                "action": "rejected"
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error responding to device request: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to process device request"
+        )
+
+
+@app.get("/student/devices")
+async def get_student_devices(email: str = Depends(verify_token)):
+    """Get student's trusted devices"""
+    try:
+        student = db.get_student_by_email(email)
+        if not student:
+            raise HTTPException(status_code=404, detail="Student not found")
+        
+        trusted_devices = student.get("trusted_devices", [])
+        
+        return {"devices": trusted_devices}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error fetching devices: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to fetch devices"
+        )
+
+
+@app.delete("/student/devices/{device_id}")
+async def remove_student_device(device_id: str, email: str = Depends(verify_token)):
+    """Remove a trusted device (student can only have one device, but keeping for future extensibility)"""
+    try:
+        student = db.get_student_by_email(email)
+        if not student:
+            raise HTTPException(status_code=404, detail="Student not found")
+        
+        student_id = student["id"]
+        trusted_devices = student.get("trusted_devices", [])
+        
+        # Remove the device
+        updated_devices = [d for d in trusted_devices if d.get("id") != device_id]
+        
+        if len(updated_devices) == len(trusted_devices):
+            raise HTTPException(status_code=404, detail="Device not found")
+        
+        db.update_student(student_id, {"trusted_devices": updated_devices})
+        
+        return {
+            "success": True,
+            "message": "Device removed successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error removing device: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to remove device"
         )
 
 # ==================== STUDENT ENROLLMENT ENDPOINTS ====================
