@@ -10,7 +10,7 @@ import { StudentEnrollmentModal } from '../../components/students/StudentEnrollm
 import { SettingsModal } from '../../components/dashboard/SettingsModal';
 import { ChangePasswordModal } from '../../components/dashboard/ChangePasswordModal';
 import { StudentQRScanner } from '../../components/StudentQRScanner';
-import { StudentDevicesModal } from '../../../components/StudentDevicesModal';
+import { StudentDevicesModal } from '../../components/StudentDevicesModal';
 
 interface ClassDetails {
   class_id: string;
