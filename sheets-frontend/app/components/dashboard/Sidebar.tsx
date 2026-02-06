@@ -252,7 +252,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {classes.length > 0 && (
               <button
                 onClick={onOpenDeviceRequests}
-                className="w-full mt-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer relative"
+                className="w-full mt-2 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer relative"
               >
                 <Smartphone className="w-4 h-4" />
                 Device Requests
