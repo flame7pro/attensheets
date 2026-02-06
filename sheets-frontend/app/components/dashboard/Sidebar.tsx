@@ -32,6 +32,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   onLogout,
   onUpdateClassName,
+  onOpenDeviceRequests,   
+  pendingDeviceRequests,
 }) => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
