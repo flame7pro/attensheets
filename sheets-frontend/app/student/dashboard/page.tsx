@@ -73,10 +73,42 @@ export default function StudentDashboard() {
   };
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
+    // Don't redirect while auth is loading
+    if (authLoading) return;
+    
+    // Not authenticated - go to auth page
+    if (!isAuthenticated) {
+      console.log('[STUDENT DASHBOARD] Not authenticated, redirecting to /auth');
       router.push('/auth');
-    } else if (!authLoading && user?.role !== 'student') {
-      router.push('/dashboard');
+      return;
+    }
+    
+    // ✅ CRITICAL FIX: Check role from multiple sources
+    if (isAuthenticated && user) {
+      // Check all possible role sources
+      const userRole = user.role;
+      const sessionRole = sessionStorage.getItem('user_role');
+      const localRole = localStorage.getItem('user_role');
+      
+      // Use the first available role
+      const actualRole = userRole || sessionRole || localRole;
+      
+      console.log('[STUDENT DASHBOARD] Role check:', {
+        userRole,
+        sessionRole,
+        localRole,
+        finalRole: actualRole
+      });
+      
+      // Only redirect if we're CERTAIN they're not a student
+      if (actualRole && actualRole !== 'student') {
+        console.log('[STUDENT DASHBOARD] ⚠️ Not a student, redirecting to /dashboard');
+        router.push('/dashboard');
+      } else if (actualRole === 'student') {
+        console.log('[STUDENT DASHBOARD] ✅ Student confirmed, staying on page');
+      } else {
+        console.log('[STUDENT DASHBOARD] ⚠️ No role found, waiting...');
+      }
     }
   }, [isAuthenticated, authLoading, user, router]);
 
