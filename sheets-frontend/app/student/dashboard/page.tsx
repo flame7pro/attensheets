@@ -113,6 +113,75 @@ export default function StudentDashboard() {
   }, [isAuthenticated, authLoading, user, router]);
 
   useEffect(() => {
+    // Check if student's device is still trusted
+    const checkDeviceTrust = async () => {
+      if (!isAuthenticated || !user) return;
+      
+      const role = sessionStorage.getItem('user_role') || localStorage.getItem('user_role');
+      if (role !== 'student') return;
+      
+      try {
+        // Get current device fingerprint
+        const { getDeviceFingerprint } = await import('@/lib/deviceFingerprint');
+        const fingerprint = await getDeviceFingerprint();
+        const currentDeviceId = fingerprint.id;
+        
+        console.log('[DEVICE_CHECK] Checking if device is still trusted:', currentDeviceId.substring(0, 20) + '...');
+        
+        // Get student's current trusted devices
+        const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/student/devices`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          }
+        );
+        
+        if (response.ok) {
+          const data = await response.json();
+          const trustedDevices = data.devices || [];
+          
+          // Check if current device is in the trusted list
+          const isDeviceTrusted = trustedDevices.some(
+            (device: any) => device.id === currentDeviceId
+          );
+          
+          if (!isDeviceTrusted) {
+            console.log('[DEVICE_CHECK] ❌ Device no longer trusted! Logging out...');
+            
+            // Device was removed - force logout
+            alert('Your device access has been revoked by your teacher. You will be logged out.');
+            
+            // Clear all auth data
+            sessionStorage.clear();
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('user_role');
+            localStorage.removeItem('remember_me');
+            
+            // Redirect to auth page
+            window.location.href = '/auth';
+          } else {
+            console.log('[DEVICE_CHECK] ✅ Device is still trusted');
+          }
+        }
+      } catch (error) {
+        console.error('[DEVICE_CHECK] Error checking device trust:', error);
+        // If error checking, might be token expired - let normal auth flow handle it
+      }
+    };
+    
+    checkDeviceTrust();
+    
+    // Check every 30 seconds while dashboard is open
+    const intervalId = setInterval(checkDeviceTrust, 30000);
+    
+    return () => clearInterval(intervalId);
+  }, [isAuthenticated, user]);
+
+  useEffect(() => {
     if (isAuthenticated && user?.role === "student") {
       loadClasses();
     }
