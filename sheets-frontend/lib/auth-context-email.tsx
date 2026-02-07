@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getDeviceFingerprint, DeviceInfo } from './deviceFingerprint';
+import { fetchWithRetry } from './fetchWithTimeout';
 
 interface User {
   id: string;
@@ -47,20 +48,33 @@ async function apiCall<T = any>(endpoint: string, options: RequestInit = {}): Pr
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      ...headers,
-      ...(options.headers as Record<string, string>),
-    },
-  });
+  try {
+    const response = await fetchWithRetry(`${API_URL}${endpoint}`, {
+      ...options,
+      headers: {
+        ...headers,
+        ...(options.headers as Record<string, string>),
+      },
+      timeout: 20000, // 20 seconds
+      maxRetries: 3,
+      baseDelay: 1000,
+    });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || error.message || `API Error: ${response.statusText}`);
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.detail || error.message || `API Error: ${response.statusText}`);
+    }
+
+    return response.json();
+  } catch (error: any) {
+    if (error.message?.includes('timeout')) {
+      throw new Error('Request timed out. Please check your connection.');
+    }
+    if (error.message?.includes('Network')) {
+      throw new Error('Network error. Please check your internet.');
+    }
+    throw error;
   }
-
-  return response.json();
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
