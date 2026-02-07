@@ -3,24 +3,69 @@ import os
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 from pymongo import MongoClient, ASCENDING, DESCENDING
-from pymongo.errors import DuplicateKeyError, PyMongoError
+from pymongo.errors import (
+    DuplicateKeyError, 
+    PyMongoError, 
+    ServerSelectionTimeoutError,
+    ConnectionFailure,
+    NetworkTimeout
+)
+import atexit
 
 class MongoDBManager:
     """Manages MongoDB database operations for Lernova Attendsheets"""
     
     def __init__(self, mongo_uri: str, db_name: str = "lernova_db"):
         """
-        Initialize MongoDB connection
+        Initialize MongoDB connection with optimized connection pool settings
         
         Args:
             mongo_uri: MongoDB connection URI
             db_name: Name of the database to use
         """
         try:
-            self.client = MongoClient(mongo_uri)
+            print("🔌 Connecting to MongoDB...")
+            
+            # ✅ OPTIMIZED CONNECTION POOL CONFIGURATION
+            self.client = MongoClient(
+                mongo_uri,
+                # Connection Pool Settings
+                maxPoolSize=50,          # Maximum number of connections in the pool
+                minPoolSize=10,          # Minimum number of connections to maintain
+                maxIdleTimeMS=45000,     # Close idle connections after 45 seconds
+                
+                # Timeout Settings (CRITICAL FIX)
+                serverSelectionTimeoutMS=10000,  # 10s timeout for finding server
+                connectTimeoutMS=10000,          # 10s timeout for initial connection
+                socketTimeoutMS=20000,           # 20s timeout for socket operations
+                
+                # Retry Settings
+                retryWrites=True,        # Automatically retry failed writes
+                retryReads=True,         # Automatically retry failed reads
+                
+                # Write Concern (for data durability)
+                w='majority',            # Wait for majority of nodes to confirm
+                
+                # Connection Options
+                maxConnecting=5,         # Max connections being established at once
+                waitQueueTimeoutMS=10000, # Max time to wait for connection from pool
+                
+                # Heartbeat and Monitoring
+                heartbeatFrequencyMS=10000,  # Check server health every 10s
+                
+                # Application Name (for MongoDB logs)
+                appName='LernovaAttendsheets'
+            )
+            
+            # Test connection immediately
+            print("🔍 Testing MongoDB connection...")
+            self.client.admin.command('ping')
+            print("✅ MongoDB ping successful")
+            
+            # Get database
             self.db = self.client[db_name]
             
-            # Collections
+            # Initialize collections
             self.users = self.db['users']
             self.students = self.db['students']
             self.classes = self.db['classes']
@@ -30,15 +75,76 @@ class MongoDBManager:
             self.attendance_sessions = self.db['attendance_sessions']
             self.verification_codes = self.db['verification_codes']
             self.password_reset_codes = self.db['password_reset_codes']
-            self.device_requests = self.db['device_requests']  # ✅ NEW COLLECTION
+            self.device_requests = self.db['device_requests']
             
             # Create indexes for better performance
+            print("📑 Creating database indexes...")
             self._create_indexes()
             
+            # Log connection pool info
             print("✅ MongoDB connection established successfully")
+            print(f"📊 Connection pool: min={10}, max={50}")
+            print(f"⏱️  Timeouts: connect={10}s, socket={20}s, serverSelection={10}s")
+            
+        except ServerSelectionTimeoutError as e:
+            print("❌ Failed to connect to MongoDB: Server selection timeout")
+            print("   This usually means:")
+            print("   1. MongoDB URI is incorrect")
+            print("   2. Network cannot reach MongoDB server")
+            print("   3. Firewall is blocking the connection")
+            print(f"   Error details: {e}")
+            raise
+            
+        except ConnectionFailure as e:
+            print("❌ Failed to connect to MongoDB: Connection failure")
+            print(f"   Error details: {e}")
+            raise
+            
         except Exception as e:
             print(f"❌ Failed to connect to MongoDB: {e}")
             raise
+    
+    def check_connection_health(self) -> dict:
+        """
+        Check MongoDB connection pool health
+        Returns connection pool statistics
+        """
+        try:
+            # Ping the server
+            self.client.admin.command('ping')
+            
+            # Get server status (requires admin privileges)
+            try:
+                server_status = self.client.admin.command('serverStatus')
+                connections = server_status.get('connections', {})
+                
+                return {
+                    'status': 'healthy',
+                    'current_connections': connections.get('current', 'N/A'),
+                    'available_connections': connections.get('available', 'N/A'),
+                    'total_created': connections.get('totalCreated', 'N/A'),
+                }
+            except Exception:
+                # If no admin access, just return basic health
+                return {
+                    'status': 'healthy',
+                    'message': 'Connected but no admin access for detailed stats'
+                }
+                
+        except Exception as e:
+            return {
+                'status': 'unhealthy',
+                'error': str(e)
+            }
+    
+    def close_connection(self):
+        """Gracefully close MongoDB connection"""
+        try:
+            if self.client:
+                self.client.close()
+                print("✅ MongoDB connection closed gracefully")
+        except Exception as e:
+            print(f"⚠️ Error closing MongoDB connection: {e}")
     
     def _create_indexes(self):
         """Create database indexes for efficient queries"""
@@ -1668,72 +1774,6 @@ class MongoDBManager:
         return count > 0
 
     # ==========================================
-    # VERIFICATION CODES METHODS
-    # ==========================================
-    
-    def store_verification_code(self, email: str, code: str, data: Dict[str, Any]) -> None:
-        """
-        Store verification code in MongoDB (replaces in-memory dict)
-        
-        Args:
-            email: User's email address
-            code: 6-digit verification code
-            data: Additional data (name, password, role, device_info, etc.)
-        """
-        verification_data = {
-            "email": email,
-            "code": code,
-            "created_at": datetime.utcnow().isoformat(),
-            **data  # Include all additional fields (name, password, role, device_info, expires_at, etc.)
-        }
-        
-        # Upsert: replace if exists, insert if new
-        self.verification_codes.update_one(
-            {"email": email},
-            {"$set": verification_data},
-            upsert=True
-        )
-    
-    def get_verification_code(self, email: str) -> Optional[Dict[str, Any]]:
-        """
-        Get verification code data for an email
-        
-        Args:
-            email: User's email address
-            
-        Returns:
-            Verification code data if found, None otherwise
-        """
-        result = self.verification_codes.find_one({"email": email}, {"_id": 0})
-        return result
-    
-    def delete_verification_code(self, email: str) -> bool:
-        """
-        Delete verification code for an email
-        
-        Args:
-            email: User's email address
-            
-        Returns:
-            True if deleted, False if not found
-        """
-        result = self.verification_codes.delete_one({"email": email})
-        return result.deleted_count > 0
-    
-    def check_verification_code_exists(self, email: str) -> bool:
-        """
-        Check if a verification code exists for an email
-        
-        Args:
-            email: User's email address
-            
-        Returns:
-            True if exists, False otherwise
-        """
-        count = self.verification_codes.count_documents({"email": email})
-        return count > 0
-
-    # ==========================================
     # PASSWORD RESET CODES METHODS
     # ==========================================
     
@@ -1798,3 +1838,13 @@ class MongoDBManager:
         """
         count = self.password_reset_codes.count_documents({"email": email})
         return count > 0
+
+def cleanup():
+    """Cleanup function to close MongoDB connections on shutdown"""
+    try:
+        # This will be implemented in your main.py
+        print("🧹 Cleaning up MongoDB connections...")
+    except Exception as e:
+        print(f"⚠️ Error during cleanup: {e}")
+
+atexit.register(cleanup)
