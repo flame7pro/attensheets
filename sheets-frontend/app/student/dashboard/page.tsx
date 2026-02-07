@@ -393,7 +393,7 @@ export default function StudentDashboard() {
             {classes.length > 0 && (
               <button
                 onClick={() => setShowQRScanner(true)}
-                className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-sm font-semibold rounded-lg hover:shadow-lg transition-all cursor-pointer"
+                className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold rounded-lg hover:shadow-lg transition-all cursor-pointer"
               >
                 <QrCode className="w-5 h-5" />
                 <span className="hidden sm:inline">Scan QR</span>
