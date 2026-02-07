@@ -1,8 +1,8 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, field_validator
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -18,6 +18,10 @@ import ssl
 from user_agents import parse as parse_user_agent
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+import asyncio
+import time
 
 # Load environment variables from this file's directory so running uvicorn from repo root still works
 ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
@@ -71,6 +75,86 @@ else:
     cors_kwargs["allow_origin_regex"] = r"https?://(localhost|127\\.0\\.0\\.1|\\d+\\.\\d+\\.\\d+\\.\\d+)(:\\d+)?$"
 
 app.add_middleware(CORSMiddleware, **cors_kwargs)
+
+# ==================== TIMEOUT MIDDLEWARE ====================
+
+class TimeoutMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware to enforce request timeouts
+    Prevents requests from hanging indefinitely
+    """
+    
+    def __init__(self, app, timeout: int = 30):
+        super().__init__(app)
+        self.timeout = timeout
+        print(f"✅ Timeout middleware enabled: {timeout}s per request")
+
+    async def dispatch(
+        self, 
+        request: Request, 
+        call_next: Callable
+    ) -> Response:
+        start_time = time.time()
+        
+        try:
+            # Set timeout for request processing
+            response = await asyncio.wait_for(
+                call_next(request), 
+                timeout=self.timeout
+            )
+            
+            # Log slow requests
+            duration = time.time() - start_time
+            if duration > 5:  # Warn on requests > 5 seconds
+                print(f"⚠️ Slow request: {request.method} {request.url.path} took {duration:.2f}s")
+            
+            return response
+            
+        except asyncio.TimeoutError:
+            duration = time.time() - start_time
+            print(f"⏱️ Request timeout: {request.method} {request.url.path} after {duration:.2f}s")
+            
+            return JSONResponse(
+                status_code=504,
+                content={
+                    "detail": f"Request timeout - operation took longer than {self.timeout} seconds",
+                    "error": "GATEWAY_TIMEOUT",
+                    "path": str(request.url.path),
+                    "method": request.method
+                }
+            )
+        except Exception as e:
+            print(f"❌ Request error: {request.method} {request.url.path} - {str(e)}")
+            raise
+
+# Add middleware to app
+app.add_middleware(TimeoutMiddleware, timeout=30)
+print("✅ Timeout middleware enabled: 30s per request")
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """Log all requests with timing"""
+    
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        start_time = time.time()
+        print(f"📥 {request.method} {request.url.path}")
+        
+        try:
+            response = await call_next(request)
+            duration = time.time() - start_time
+            
+            status_icon = "✅" if response.status_code < 400 else "❌"
+            print(f"{status_icon} {request.method} {request.url.path} - {response.status_code} ({duration:.2f}s)")
+            
+            response.headers["X-Process-Time"] = f"{duration:.4f}"
+            return response
+            
+        except Exception as e:
+            duration = time.time() - start_time
+            print(f"❌ {request.method} {request.url.path} - ERROR ({duration:.2f}s): {str(e)}")
+            raise
+
+# Add after TimeoutMiddleware
+app.add_middleware(RequestLoggingMiddleware)
 
 # Security
 security = HTTPBearer()
