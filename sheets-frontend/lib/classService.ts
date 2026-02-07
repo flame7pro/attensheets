@@ -1,5 +1,6 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 import { Class } from '@/types';
+import { fetchWithRetry } from './fetchWithTimeout';
 
 export interface AttendanceCounts {
   P: number;
@@ -17,24 +18,36 @@ class ClassService {
   }
 
   private async apiCall<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    let response: Response;
     try {
-      response = await fetch(`${API_URL}${endpoint}`, {
+      const response = await fetchWithRetry(`${API_URL}${endpoint}`, {
         ...options,
         headers: {
           ...this.getAuthHeaders(),
           ...(options.headers as Record<string, string>),
         },
+        timeout: 30000, // 30 seconds for class operations
+        maxRetries: 3,
+        baseDelay: 1000,
       });
-    } catch (err) {
-      const hint = `Network error calling ${API_URL}${endpoint}. Is the backend running on port 8000 and CORS allowing this origin?`;
+  
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.detail || error.message || `API Error: ${response.statusText}`);
+      }
+  
+      return response.json();
+    } catch (error: any) {
+      const hint = `Network error: ${
+        error.message?.includes('timeout') 
+          ? 'Request timed out - server may be slow' 
+          : error.message?.includes('Network')
+          ? 'Check your internet connection'
+          : error.message
+      }`;
+      
+      console.error('API call failed:', { endpoint, error: error.message, hint });
       throw new Error(hint);
     }
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new Error(error.detail || error.message || `API Error: ${response.statusText}`);
-    }
-    return response.json();
   }
 
   async getAllClasses(): Promise<Class[]> {
