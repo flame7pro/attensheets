@@ -1,7 +1,7 @@
 // lib/OfflineAwareLayout.tsx
 'use client';
 
-import { useNetworkStatus } from '../../components/NetworkStatus';
+import { useNetworkStatus } from './components/NetworkStatus';
 
 export function OfflineAwareLayout({ children }: { children: React.ReactNode }) {
   const { isOnline } = useNetworkStatus();
