@@ -1020,8 +1020,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
               {activeClass.enrollment_mode === 'enrollment_via_id' && (
                 <button
                   onClick={onOpenQRAttendance}
-                  className="flex items-center gap-1.5 px-3 py-2 text-sm bg-gradient-to-r from-teal-600 to-emerald-600
-    hover:from-teal-700 hover:to-emerald-700 hover:shadow-lg transition-all text-white font-medium rounded-lg cursor-pointer whitespace-nowrap"
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm bg-gradient-to-r from-teal-600 to-cyan-600 hover:shadow-lg transition-all text-white font-medium rounded-lg cursor-pointer whitespace-nowrap"
                 >
                   <QrCode className="w-4 h-4" />
                   <span className="hidden sm:inline">QR Attendance</span>
@@ -1032,7 +1031,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
                 <button
                   onClick={() => setShowExportMenu(!showExportMenu)}
                   disabled={activeClass.students.length === 0}
-                  className="flex items-center gap-1.5 px-3 py-2 text-sm bg-gradient-to-r from-teal-600 to-cyan-600 text-white font-medium rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-medium rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
                 >
                   <Download className="w-4 h-4" />
                   <span className="hidden sm:inline">Export Data</span>
