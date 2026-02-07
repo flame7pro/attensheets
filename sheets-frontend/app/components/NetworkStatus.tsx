@@ -1,3 +1,4 @@
+
 // components/NetworkStatus.tsx
 'use client';
 
