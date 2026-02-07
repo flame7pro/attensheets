@@ -142,7 +142,7 @@ export const StudentSidebar: React.FC<StudentSidebarProps> = ({
             {classes.length > 0 && (
               <button
                 onClick={onQRScan}
-                className="w-full mt-4 px-4 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-sm font-semibold rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full mt-4 px-4 py-3 bg-gradient-to-r from-teal-600 to-emerald-600 text-white text-sm font-semibold rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <QrCode className="w-4 h-4" />
                 Scan QR Code
@@ -153,7 +153,7 @@ export const StudentSidebar: React.FC<StudentSidebarProps> = ({
             {onManageDevices && (
               <button
                 onClick={onManageDevices}
-                className="w-full flex items-center gap-3 px-4 py-2 mt-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all"
+                className="w-full mt-4 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <Smartphone className="w-5 h-5" />
                 <span>My Devices</span>
