@@ -1,4 +1,3 @@
-
 // components/NetworkStatus.tsx
 'use client';
 
@@ -30,11 +29,18 @@ export const NetworkStatus: React.FC = () => {
     const handleOffline = () => {
       console.log('❌ Network lost');
       setIsOnline(false);
-      setShowNotification(true);
       setJustReconnected(false);
+      
+      // Show toast notification when going offline
+      setShowNotification(true);
+      
+      // Hide toast after 5 seconds
+      setTimeout(() => {
+        setShowNotification(false);
+      }, 5000);
     };
 
-    // Set initial state
+    // Set initial state (don't show notification on mount)
     setIsOnline(navigator.onLine);
 
     window.addEventListener('online', handleOnline);
@@ -46,17 +52,17 @@ export const NetworkStatus: React.FC = () => {
     };
   }, []);
 
-  // Only show notification when offline OR just reconnected
+  // Only show toast notification
   if (!showNotification) return null;
 
   return (
     <>
-      {/* Floating Toast Notification */}
+      {/* Floating Toast Notification Only */}
       <div 
-        className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] 
+        className={`fixed top-4 left-1/2 -translate-x-1/2 z-[9999] 
           px-4 py-3 rounded-xl shadow-2xl backdrop-blur-sm
           transition-all duration-500 ease-out
-          ${showNotification ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}
+          ${showNotification ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'}
           ${isOnline && justReconnected
             ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' 
             : 'bg-gradient-to-r from-red-500 to-rose-500 text-white'
@@ -97,26 +103,6 @@ export const NetworkStatus: React.FC = () => {
           )}
         </div>
       </div>
-
-      {/* Persistent Top Banner (Only when offline) */}
-      {!isOnline && (
-        <div className="fixed top-0 left-0 right-0 z-[99] bg-red-600 text-white">
-          <div className="max-w-7xl mx-auto px-4 py-2.5">
-            <div className="flex items-center justify-center gap-2 text-sm font-medium">
-              <WifiOff className="w-4 h-4 animate-pulse" strokeWidth={2.5} />
-              <span className="hidden sm:inline">
-                Working offline • Attendance will sync when reconnected
-              </span>
-              <span className="sm:hidden">
-                Offline • Will sync later
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add spacing to prevent content overlap when offline banner is shown */}
-      {!isOnline && <div className="h-10" />}
 
       <style jsx>{`
         @keyframes slideDown {
