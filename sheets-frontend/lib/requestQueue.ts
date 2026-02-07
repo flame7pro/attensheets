@@ -154,4 +154,4 @@ class RequestQueue {
 export const requestQueue = new RequestQueue(3); // Max 3 concurrent requests
 
 // Separate queue for high-priority operations (auth, critical updates)
-export const priorityQueue = new RequestQueue(2);s
+export const priorityQueue = new RequestQueue(2);
