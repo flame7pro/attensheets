@@ -255,8 +255,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="w-full mt-2 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer relative"
               >
                 <Smartphone className="w-4 h-4" />
-                Device Requests
-                {pendingDeviceRequests && pendingDeviceRequests > 0 && (
+                Device Requests 
+                {(pendingDeviceRequests) && pendingDeviceRequests > 0 && (
                   <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-xs font-bold rounded-full flex items-center justify-center shadow-lg">
                     {pendingDeviceRequests}
                   </span>
