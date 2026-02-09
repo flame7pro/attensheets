@@ -82,9 +82,10 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
 
   const fetchClassData = async (classId: number) => {
     try {
-      const token = localStorage.getItem('access_token');
+      // ✅ FIX: Check BOTH sessionStorage AND localStorage
+      const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
       if (!token) return null;
-
+  
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/classes/${classId}`,
         {
@@ -93,7 +94,7 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
           }
         }
       );
-
+  
       if (response.ok) {
         const data = await response.json();
         return data.class;
@@ -180,7 +181,8 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
     }
   
     try {
-      const token = localStorage.getItem('access_token');
+      // ✅ FIX: Check BOTH sessionStorage AND localStorage
+      const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
       if (!token) {
         console.error('[MULTI_SESSION] No auth token');
         alert('Please login again');
@@ -328,7 +330,6 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
       alert(`Failed to save attendance:\n\n${errorMessage}\n\nPlease try again.`);
     }
   };
-
     
   const handleCloseMultiSession = () => {
     setShowMultiSessionModal(false);
