@@ -10,7 +10,10 @@ export interface AttendanceCounts {
 
 class ClassService {
   private getAuthHeaders(): Record<string, string> {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    // ✅ FIX: Check BOTH sessionStorage AND localStorage (same as auth-context)
+    const token = typeof window !== 'undefined' 
+      ? (sessionStorage.getItem('access_token') || localStorage.getItem('access_token'))
+      : null;
     return {
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` }),
