@@ -933,6 +933,57 @@ export const AttendanceSheet: React.FC<AttendanceSheetProps> = ({
     return () => clearInterval(interval);
   }, [activeClass.id, currentMonth, currentYear, daysInMonth]);
 
+  React.useEffect(() => {
+    const handleQRScan = async (event: CustomEvent) => {
+      const { classId: scannedClassId, date, count } = event.detail;
+      
+      // Only refresh if it's for this class
+      if (String(scannedClassId) !== String(activeClass.id)) {
+        return;
+      }
+      
+      console.log(`[ATTENDANCE_SHEET] 🔔 New scan detected! Refreshing data...`);
+      console.log(`[ATTENDANCE_SHEET] Date: ${date}, Scan count: ${count}`);
+      
+      // Fetch updated class data
+      const updatedClass = await fetchClassData(activeClass.id);
+      if (updatedClass) {
+        console.log(`[ATTENDANCE_SHEET] ✅ Data refreshed successfully`);
+        onUpdateClassData(updatedClass);
+      }
+    };
+    
+    const handleSessionCompleted = async (event: CustomEvent) => {
+      const { classId: completedClassId, date } = event.detail;
+      
+      // Only refresh if it's for this class
+      if (String(completedClassId) !== String(activeClass.id)) {
+        return;
+      }
+      
+      console.log(`[ATTENDANCE_SHEET] 🏁 QR Session completed! Refreshing data...`);
+      console.log(`[ATTENDANCE_SHEET] Date: ${date}`);
+      
+      // Fetch updated class data
+      const updatedClass = await fetchClassData(activeClass.id);
+      if (updatedClass) {
+        console.log(`[ATTENDANCE_SHEET] ✅ Data refreshed after session completion`);
+        onUpdateClassData(updatedClass);
+      }
+    };
+    
+    // Listen for QR scan events
+    window.addEventListener('qr-student-scanned', handleQRScan as EventListener);
+    window.addEventListener('qr-session-completed', handleSessionCompleted as EventListener);
+    
+    console.log(`[ATTENDANCE_SHEET] 👂 Listening for real-time QR scan events for class ${activeClass.id}`);
+    
+    return () => {
+      window.removeEventListener('qr-student-scanned', handleQRScan as EventListener);
+      window.removeEventListener('qr-session-completed', handleSessionCompleted as EventListener);
+      console.log(`[ATTENDANCE_SHEET] 🔇 Stopped listening for QR scan events`);
+    };
+  }, [activeClass.id, onUpdateClassData]);
 
   return (
     <>
