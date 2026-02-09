@@ -89,7 +89,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        class_id: classId,
+                        class_id: String(classId),
                         date: currentDate,
                         rotation_interval: rotationInterval,
                     }),
@@ -246,7 +246,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        class_id: classId,
+                        class_id: String(classId),
                         date: currentDate
                     }),
                 }
