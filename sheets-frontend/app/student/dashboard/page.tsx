@@ -181,7 +181,7 @@ export default function StudentDashboard() {
   const loadClasses = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/student/classes`, {
         headers: {
           'Authorization': `Bearer ${token}`
@@ -236,7 +236,7 @@ export default function StudentDashboard() {
     setLeaveError('');
 
     try {
-      const token = localStorage.getItem('access_token');
+      const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/student/unenroll/${classToLeave.class_id}`,
         {
