@@ -99,8 +99,12 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 throw new Error('Please login again');
             }
     
-            // ✅ STEP 5: SINGLE FAST API CALL
+            // ✅ STEP 5: FIXED - Send correct payload with date and code
             console.log('[SCANNER] 📤 Sending to backend...');
+            console.log('🔍 SCANNED QR DATA:', qrData);
+            console.log('📅 QR Date:', qrData.date);
+            console.log('🏫 QR Class ID:', qrData.class_id);
+            console.log('🔑 QR Code:', qrData.code);
             
             const response = await fetch(
                 `${process.env.NEXT_PUBLIC_API_URL}/qr/scan`,
@@ -112,12 +116,15 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     },
                     body: JSON.stringify({
                         class_id: qrData.class_id,
-                        qr_code: decodedText
+                        date: qrData.date,        // ✅ FIXED: Send parsed date
+                        code: qrData.code          // ✅ FIXED: Send parsed code (not qr_code!)
                     })
                 }
             );
     
+            console.log('📥 BACKEND RESPONSE STATUS:', response.status);
             const data = await response.json();
+            console.log('📥 BACKEND RESPONSE DATA:', data);
     
             if (!response.ok) {
                 throw new Error(data.detail || `Server error ${response.status}`);
