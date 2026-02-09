@@ -35,8 +35,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
     const isGeneratingQR = useRef<boolean>(false);
     const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-    
-    // ✅ NEW: Track last rotation timestamp for accurate countdown
     const lastRotationTimeRef = useRef<number>(Date.now());
 
     const showNotification = (type: 'success' | 'error' | 'info', message: string) => {
@@ -75,7 +73,8 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
     const startSession = async () => {
         try {
-            const token = localStorage.getItem('access_token');
+            // ✅ FIX: Check BOTH sessionStorage and localStorage
+            const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
             if (!token) {
                 showNotification('error', 'Please login again');
                 return;
@@ -106,7 +105,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             const session = data.session;
 
             lastCodeRef.current = '';
-            lastRotationTimeRef.current = Date.now(); // ✅ Reset rotation timestamp
+            lastRotationTimeRef.current = Date.now();
 
             setIsActive(true);
             setRotationInterval(Number(session.rotation_interval));
@@ -123,7 +122,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         }
     };
 
-    // ✅ UNIFIED TIMER - Single source of truth
     useEffect(() => {
         if (!isActive) {
             if (timerIntervalRef.current) {
@@ -133,11 +131,10 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             return;
         }
 
-        // Update timer every 100ms for smooth countdown
         timerIntervalRef.current = setInterval(() => {
             const elapsed = (Date.now() - lastRotationTimeRef.current) / 1000;
             const remaining = Math.max(0, rotationInterval - elapsed);
-            setTimeLeft(Math.ceil(remaining)); // Round up for display
+            setTimeLeft(Math.ceil(remaining));
         }, 100);
 
         return () => {
@@ -148,7 +145,6 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
         };
     }, [isActive, rotationInterval]);
 
-    // ✅ BACKEND SYNC - Poll for code changes and student counts
     useEffect(() => {
         if (!isActive) {
             if (pollIntervalRef.current) {
@@ -160,7 +156,8 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
 
         const pollSession = async () => {
             try {
-                const token = localStorage.getItem('access_token');
+                // ✅ FIX: Check BOTH sessionStorage and localStorage
+                const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
                 if (!token) return;
 
                 const res = await fetch(
@@ -175,19 +172,14 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 const session = data.session;
                 const serverCode = session.current_code;
                 
-                // Update counts and session number
                 setScannedCount(session.scanned_students?.length ?? 0);
                 setSessionNumber(session.session_number || 1);
 
-                // ✅ CRITICAL: Only update when code actually changes
                 if (serverCode !== currentCode) {
                     console.log(`[QR] Code rotated: ${currentCode} -> ${serverCode}`);
                     setCurrentCode(serverCode);
                     setRotationInterval(Number(session.rotation_interval));
-                    
-                    // ✅ RESET TIMER TIMESTAMP (not the display value)
                     lastRotationTimeRef.current = Date.now();
-                    
                     await generateQRCode(serverCode);
                 }
             } catch (e) {
@@ -195,10 +187,7 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
             }
         };
 
-        // Initial poll
         pollSession();
-
-        // Poll every 2 seconds
         pollIntervalRef.current = setInterval(pollSession, 2000);
 
         return () => {
@@ -228,7 +217,8 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
     const stopSession = async () => {
         setIsStopping(true);
         try {
-            const token = localStorage.getItem('access_token');
+            // ✅ FIX: Check BOTH sessionStorage and localStorage
+            const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
             if (!token) {
                 showNotification('error', 'Please login again');
                 setIsStopping(false);
