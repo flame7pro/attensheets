@@ -54,7 +54,10 @@ export default function DashboardPage() {
 
   const loadPendingDeviceRequests = async () => {
     try {
-      const token = localStorage.getItem('access_token');
+      // ✅ FIX: Check BOTH storages
+      const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
+      if (!token) return; // Skip if no token
+      
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/teacher/device-requests`,
         {
