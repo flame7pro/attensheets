@@ -47,15 +47,15 @@ export const MultiSessionModal: React.FC<MultiSessionModalProps> = ({
       const newSessions = [...prev];
       const current = newSessions[index].status;
       
-      // Cycle: null → P → A → L → P
+      // ✅ FIXED: Cycle: null → P → A → L → null
       if (current === null) {
         newSessions[index].status = 'P';
       } else if (current === 'P') {
         newSessions[index].status = 'A';
       } else if (current === 'A') {
         newSessions[index].status = 'L';
-      } else {
-        newSessions[index].status = 'P';
+      } else if (current === 'L') {
+        newSessions[index].status = null; // ✅ GO BACK TO NULL
       }
       
       return newSessions;
