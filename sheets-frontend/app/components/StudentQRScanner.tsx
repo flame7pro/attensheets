@@ -127,7 +127,20 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
             console.log('📥 BACKEND RESPONSE DATA:', data);
     
             if (!response.ok) {
-                throw new Error(data.detail || `Server error ${response.status}`);
+                // ✅ FIXED: Handle different error formats from backend
+                let errorMessage = 'Failed to mark attendance';
+                
+                if (typeof data.detail === 'string') {
+                    errorMessage = data.detail;
+                } else if (typeof data.message === 'string') {
+                    errorMessage = data.message;
+                } else if (typeof data.error === 'string') {
+                    errorMessage = data.error;
+                } else if (typeof data === 'string') {
+                    errorMessage = data;
+                }
+                
+                throw new Error(errorMessage);
             }
     
             console.log('[SCANNER] ✅ Success!');
