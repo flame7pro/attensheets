@@ -90,8 +90,11 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 throw new Error('This QR code is for a different class!');
             }
     
-            // STEP 4: Get token
-            const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+            // ✅ STEP 4: FIXED - Check BOTH sessionStorage AND localStorage
+            const token = typeof window !== 'undefined' 
+                ? (sessionStorage.getItem('access_token') || localStorage.getItem('access_token'))
+                : null;
+            
             if (!token) {
                 throw new Error('Please login again');
             }
