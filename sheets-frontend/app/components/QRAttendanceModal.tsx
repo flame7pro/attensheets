@@ -172,7 +172,19 @@ export const QRAttendanceModal: React.FC<QRAttendanceModalProps> = ({
                 const session = data.session;
                 const serverCode = session.current_code;
                 
-                setScannedCount(session.scanned_students?.length ?? 0);
+                const newScannedCount = session.scanned_students?.length ?? 0;
+                
+                // ✅ NEW: Dispatch event when student count changes (real-time updates)
+                if (newScannedCount > scannedCount) {
+                    console.log(`[QR] New scan detected! ${scannedCount} -> ${newScannedCount}`);
+                    if (typeof window !== 'undefined') {
+                        window.dispatchEvent(new CustomEvent('qr-student-scanned', {
+                            detail: { classId, date: currentDate, count: newScannedCount }
+                        }));
+                    }
+                }
+                
+                setScannedCount(newScannedCount);
                 setSessionNumber(session.session_number || 1);
 
                 if (serverCode !== currentCode) {
