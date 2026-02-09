@@ -35,7 +35,7 @@ export const MultiSessionModal: React.FC<MultiSessionModalProps> = ({
         initialSessions.push({
           id: existing?.id || `session_${i + 1}`,
           name: existing?.name || `Session ${i + 1}`,
-          status: existing?.status || null,
+          status: existing?.status ?? null,  // ✅ Use ?? instead of ||
         });
       }
       setSessions(initialSessions);
@@ -47,16 +47,24 @@ export const MultiSessionModal: React.FC<MultiSessionModalProps> = ({
       const newSessions = [...prev];
       const current = newSessions[index].status;
       
-      // ✅ FIXED: Cycle: null → P → A → L → null
-      if (current === null) {
-        newSessions[index].status = 'P';
+      // ✅ FIXED: Explicit cycling with null as a valid state
+      // null → P → A → L → null
+      let newStatus: 'P' | 'A' | 'L' | null;
+      
+      if (current === null || current === undefined) {
+        newStatus = 'P';
       } else if (current === 'P') {
-        newSessions[index].status = 'A';
+        newStatus = 'A';
       } else if (current === 'A') {
-        newSessions[index].status = 'L';
-      } else if (current === 'L') {
-        newSessions[index].status = null; // ✅ GO BACK TO NULL
+        newStatus = 'L';
+      } else {
+        newStatus = null;  // L → back to null
       }
+      
+      newSessions[index] = {
+        ...newSessions[index],
+        status: newStatus
+      };
       
       return newSessions;
     });
@@ -119,7 +127,7 @@ export const MultiSessionModal: React.FC<MultiSessionModalProps> = ({
           <div className="flex items-start gap-2">
             <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 flex-shrink-0 mt-0.5" />
             <p className="text-[10px] sm:text-xs text-blue-800 leading-relaxed">
-              Session 1 always syncs with the main attendance sheet. Mark additional sessions here.
+              Click buttons to cycle: · → P → A → L → · (null clears the session)
             </p>
           </div>
         </div>
@@ -157,6 +165,11 @@ export const MultiSessionModal: React.FC<MultiSessionModalProps> = ({
               >
                 {session.status || '·'}
               </button>
+
+              {/* Debug info - REMOVE THIS AFTER TESTING */}
+              <div className="mt-2 text-[10px] text-slate-500 text-center">
+                Current: {session.status === null ? 'null' : session.status}
+              </div>
             </div>
           ))}
         </div>
