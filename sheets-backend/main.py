@@ -3168,7 +3168,7 @@ async def stop_qr_session(payload: dict, email: str = Depends(verify_token)):
         
         if DB_TYPE == "mongodb":
             db.classes.update_one(
-                {"teacher_id": user["id"], "id": int(class_id) if class_id.isdigit() else class_id},
+                {"teacher_id": user["id"], "id": int(class_id) if isinstance(class_id, str) and class_id.isdigit() else class_id},
                 {"$set": class_data}
             )
         else:
