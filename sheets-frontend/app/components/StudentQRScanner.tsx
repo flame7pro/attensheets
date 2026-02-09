@@ -22,6 +22,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
     const [selectedClass, setSelectedClass] = useState<string>('');
     const [scanning, setScanning] = useState<boolean>(false);
     const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+    const [debugInfo, setDebugInfo] = useState<string>('');
     const [processing, setProcessing] = useState<boolean>(false);
     const [searchQuery, setSearchQuery] = useState<string>('');
     const html5QrRef = useRef<Html5Qrcode | null>(null);
@@ -99,7 +100,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 throw new Error('Please login again');
             }
     
-            // ✅ STEP 5: FIXED - Send correct payload with date and code
+            // ✅ STEP 5: FIXED - Send the raw QR code string (backend expects this format)
             console.log('[SCANNER] 📤 Sending to backend...');
             console.log('🔍 SCANNED QR DATA:', qrData);
             console.log('📅 QR Date:', qrData.date);
@@ -116,8 +117,7 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                     },
                     body: JSON.stringify({
                         class_id: qrData.class_id,
-                        date: qrData.date,        // ✅ FIXED: Send parsed date
-                        code: qrData.code          // ✅ FIXED: Send parsed code (not qr_code!)
+                        qr_code: decodedText  // ✅ CRITICAL: Send the FULL QR string (backend parses it)
                     })
                 }
             );
@@ -139,6 +139,13 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                 } else if (typeof data === 'string') {
                     errorMessage = data;
                 }
+                
+                // 🔍 Capture debug info for mobile display
+                setDebugInfo(JSON.stringify({
+                    status: response.status,
+                    response: data,
+                    qrData: { class_id: qrData.class_id, date: qrData.date, code: qrData.code }
+                }, null, 2));
                 
                 throw new Error(errorMessage);
             }
@@ -541,6 +548,15 @@ export const StudentQRScanner: React.FC<StudentQRScannerProps> = ({
                                                 <p className="text-sm text-white/90 leading-snug">
                                                     {result.message}
                                                 </p>
+                                                
+                                                {/* 🔍 DEBUG: Show technical details for errors */}
+                                                {!result.success && (
+                                                    <div className="mt-2 pt-2 border-t border-white/20">
+                                                        <p className="text-xs text-white/70 font-mono">
+                                                            Debug Info - Screenshot this to send to developer
+                                                        </p>
+                                                    </div>
+                                                )}
                                                 
                                                 {result.success && (
                                                     <div className="mt-3">
