@@ -88,7 +88,14 @@ export const StudentEnrollmentModal: React.FC<EnrollmentModalProps> = ({
     setError('');
 
     try {
-      const token = localStorage.getItem('access_token');
+      // ✅ FIXED - Check BOTH sessionStorage AND localStorage
+      const token = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
+      
+      if (!token) {
+        setError('Please login again');
+        return;
+      }
+      
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/student/enroll`,
         {
