@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Clock, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Clock, Check, AlertCircle } from 'lucide-react';
 
 interface Session {
   id: string;
@@ -28,49 +28,74 @@ export const MultiSessionModal: React.FC<MultiSessionModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      console.log('[MODAL] Opening with sessions:', currentSessions);
+      
       // Initialize with 3 sessions
       const initialSessions: Session[] = [];
       for (let i = 0; i < 3; i++) {
         const existing = currentSessions[i];
-        initialSessions.push({
-          id: existing?.id || `session_${i + 1}`,
-          name: existing?.name || `Session ${i + 1}`,
+        const newSession: Session = {
+          id: existing?.id ?? `session_${i + 1}`,
+          name: existing?.name ?? `Session ${i + 1}`,
           status: existing?.status ?? null,  // ✅ Use ?? instead of ||
-        });
+        };
+        initialSessions.push(newSession);
+        console.log(`[MODAL] Session ${i + 1}:`, newSession);
       }
+      
       setSessions(initialSessions);
     }
   }, [isOpen, currentSessions]);
 
   const toggleStatus = (index: number) => {
-    setSessions(prev => {
-      const newSessions = [...prev];
-      const current = newSessions[index].status;
+    console.log('\n[TOGGLE] Button clicked, index:', index);
+    
+    setSessions(prevSessions => {
+      const newSessions = [...prevSessions];
+      const currentSession = newSessions[index];
+      const currentStatus = currentSession.status;
       
-      // ✅ FIXED: Explicit cycling with null as a valid state
-      // null → P → A → L → null
+      console.log('[TOGGLE] Current status:', currentStatus);
+      console.log('[TOGGLE] Current status type:', typeof currentStatus);
+      console.log('[TOGGLE] Is null?', currentStatus === null);
+      console.log('[TOGGLE] Is undefined?', currentStatus === undefined);
+      
+      // ✅ EXPLICIT STATE MACHINE: null → P → A → L → null
       let newStatus: 'P' | 'A' | 'L' | null;
       
-      if (current === null || current === undefined) {
+      if (currentStatus === null || currentStatus === undefined) {
         newStatus = 'P';
-      } else if (current === 'P') {
+        console.log('[TOGGLE] null/undefined → P');
+      } else if (currentStatus === 'P') {
         newStatus = 'A';
-      } else if (current === 'A') {
+        console.log('[TOGGLE] P → A');
+      } else if (currentStatus === 'A') {
         newStatus = 'L';
+        console.log('[TOGGLE] A → L');
+      } else if (currentStatus === 'L') {
+        newStatus = null;
+        console.log('[TOGGLE] L → null');
       } else {
-        newStatus = null;  // L → back to null
+        // Fallback (shouldn't happen)
+        newStatus = 'P';
+        console.log('[TOGGLE] FALLBACK → P');
       }
       
+      // Create new session object
       newSessions[index] = {
-        ...newSessions[index],
+        ...currentSession,
         status: newStatus
       };
+      
+      console.log('[TOGGLE] New status:', newStatus);
+      console.log('[TOGGLE] Updated session:', newSessions[index]);
       
       return newSessions;
     });
   };
 
   const handleSave = () => {
+    console.log('[SAVE] Saving sessions:', sessions);
     onSave(sessions);
     onClose();
   };
@@ -127,7 +152,7 @@ export const MultiSessionModal: React.FC<MultiSessionModalProps> = ({
           <div className="flex items-start gap-2">
             <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 flex-shrink-0 mt-0.5" />
             <p className="text-[10px] sm:text-xs text-blue-800 leading-relaxed">
-              Click buttons to cycle: · → P → A → L → · (null clears the session)
+              Click to cycle: · → P → A → L → · (click through all 4 states)
             </p>
           </div>
         </div>
@@ -165,11 +190,6 @@ export const MultiSessionModal: React.FC<MultiSessionModalProps> = ({
               >
                 {session.status || '·'}
               </button>
-
-              {/* Debug info - REMOVE THIS AFTER TESTING */}
-              <div className="mt-2 text-[10px] text-slate-500 text-center">
-                Current: {session.status === null ? 'null' : session.status}
-              </div>
             </div>
           ))}
         </div>
