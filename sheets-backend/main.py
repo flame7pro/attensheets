@@ -2749,31 +2749,31 @@ async def start_qr_session(request: dict, email: str = Depends(verify_token)):
         code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
         print(f"[QR_START] Generated code: {code}")
         
-        # Create session data
+        # ✅ CRITICAL FIX: Use consistent timestamp format
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
         
+        # Create session data
         session_data = {
             "class_id": class_id,
             "teacher_id": user["id"],
             "date": date,
             "current_code": code,
-            "rotation_interval": int(rotation_interval),
+            "rotation_interval": int(rotation_interval),  # Ensure integer
             "session_number": session_number,
             "scanned_students": [],
             "started_at": now_iso,
             "last_rotation": now_iso,
-            "code_generated_at": now_iso
+            "code_generated_at": now_iso  # ✅ This is the key field for rotation
         }
         
-        # ✅ FIX: Store in file instead of memory
+        # Store in active sessions
         session_key = f"{class_id}_{date}"
-        session_file = os.path.join(db.base_dir, "qr_sessions", f"{session_key}.json")
-        os.makedirs(os.path.dirname(session_file), exist_ok=True)
-        db.write_json(session_file, session_data)
+        if not hasattr(db, 'active_qr_sessions'):
+            db.active_qr_sessions = {}
+        db.active_qr_sessions[session_key] = session_data
         
         print(f"[QR_START] ✅ Session started successfully")
-        print(f"[QR_START] File: {session_file}")
         print(f"[QR_START] ═══════════════════════════════════\n")
         
         return {"success": True, "session": session_data}
@@ -2852,23 +2852,18 @@ async def get_qr_session(class_id: str, date: str, email: str = Depends(verify_t
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # ✅ FIX: Read from file instead of memory
     session_key = f"{class_id}_{date}"
-    session_file = os.path.join(db.base_dir, "qr_sessions", f"{session_key}.json")
     
-    if not os.path.exists(session_file):
+    # Check active sessions
+    if not hasattr(db, 'active_qr_sessions'):
+        db.active_qr_sessions = {}
+    
+    session = db.active_qr_sessions.get(session_key)
+    
+    if not session or session["teacher_id"] != user["id"]:
         return {"active": False}
     
-    try:
-        session = db.read_json(session_file)
-    except Exception as e:
-        print(f"[QR_SESSION] ❌ Error reading session file: {e}")
-        return {"active": False}
-    
-    if session.get("teacher_id") != user["id"]:
-        return {"active": False}
-    
-    # ✅ Always check and rotate if needed
+    # ✅ CRITICAL: Always check and rotate if needed
     print(f"\n[QR_SESSION] Polling session {session_key}")
     print(f"[QR_SESSION] Current code: {session.get('current_code')}")
     print(f"[QR_SESSION] Last rotation: {session.get('code_generated_at')}")
@@ -2876,8 +2871,8 @@ async def get_qr_session(class_id: str, date: str, email: str = Depends(verify_t
     # Rotate if needed
     updated_session = rotate_qr_code_if_needed(session)
     
-    # ✅ FIX: Save back to file
-    db.write_json(session_file, updated_session)
+    # ✅ CRITICAL: Update in memory storage
+    db.active_qr_sessions[session_key] = updated_session
     
     print(f"[QR_SESSION] After rotation check: {updated_session.get('current_code')}")
     print(f"[QR_SESSION] Response ready\n")
@@ -2927,31 +2922,24 @@ async def scan_qr_code(
                 detail="This QR code is for a different class!"
             )
         
-        # ✅ FIX: Read session from file
+        # Get active session
         session_key = f"{request.class_id}_{date}"
-        session_file = os.path.join(db.base_dir, "qr_sessions", f"{session_key}.json")
+        if not hasattr(db, 'active_qr_sessions'):
+            db.active_qr_sessions = {}
         
-        if not os.path.exists(session_file):
-            print(f"[QR_SCAN] ❌ No session file found: {session_file}")
+        session = db.active_qr_sessions.get(session_key)
+        if not session:
+            print(f"[QR_SCAN] ❌ No active session for {session_key}")
             raise HTTPException(
                 status_code=404,
                 detail="No active QR session for this date. Teacher may have stopped the session."
-            )
-        
-        try:
-            session = db.read_json(session_file)
-        except Exception as e:
-            print(f"[QR_SCAN] ❌ Error reading session: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to read session data"
             )
         
         print(f"[QR_SCAN] ✓ Session found: #{session['session_number']}")
         
         # Validate QR code
         if session["current_code"] != qr_code_value:
-            print(f"[QR_SCAN] ❌ Code mismatch: {qr_code_value} != {session['current_code']}")
+            print(f"[QR_SCAN] ❌ Code mismatch")
             raise HTTPException(
                 status_code=400,
                 detail="Invalid or expired QR code. Please try scanning again."
@@ -3085,7 +3073,7 @@ async def scan_qr_code(
                     "sessions": sessions,
                     "updated_at": datetime.now(timezone.utc).isoformat()
                 }
-                print(f"[QR_SCAN] ✓ Updated session #{session_number}")
+                print(f"[QR_SCAN] ✓ Updated session #{session_number} (preserved manual)")
 
         # Save to database
         students[student_index] = student_record
@@ -3099,12 +3087,12 @@ async def scan_qr_code(
         db.write_json(class_file, class_data)
         print(f"[QR_SCAN] ✓ Saved to database")
         
-        # ✅ FIX: Update session file with scanned students
+        # Update session scanned students
         scanned = session.get("scanned_students", [])
         if student_record_id not in scanned:
             scanned.append(student_record_id)
             session["scanned_students"] = scanned
-            db.write_json(session_file, session)
+            db.active_qr_sessions[session_key] = session
             print(f"[QR_SCAN] ✓ Added to scanned list ({len(scanned)} total)")
         
         print(f"[QR_SCAN] ✅ SUCCESS - {student_record['name']} marked present\n")
@@ -3145,14 +3133,16 @@ async def stop_qr_session(payload: dict, email: str = Depends(verify_token)):
     try:
         print(f"\n[QR_STOP] Stopping session for class {class_id}, date {date}")
         
-        # ✅ FIX: Read session from file
         session_key = f"{class_id}_{date}"
-        session_file = os.path.join(db.base_dir, "qr_sessions", f"{session_key}.json")
         
-        if not os.path.exists(session_file):
+        # Get active session
+        if not hasattr(db, 'active_qr_sessions'):
+            db.active_qr_sessions = {}
+        
+        session = db.active_qr_sessions.get(session_key)
+        
+        if not session:
             raise HTTPException(status_code=404, detail="No active session found")
-        
-        session = db.read_json(session_file)
         
         if session.get("teacher_id") != user["id"]:
             raise HTTPException(status_code=403, detail="Unauthorized")
@@ -3231,12 +3221,11 @@ async def stop_qr_session(payload: dict, email: str = Depends(verify_token)):
         # Update teacher overview
         db.update_user_overview(user["id"])
         
-        # ✅ FIX: Delete session file instead of removing from memory
-        os.remove(session_file)
+        # Remove active session
+        del db.active_qr_sessions[session_key]
         
         print(f"[QR_STOP] ✅ Session stopped successfully")
         print(f"  Scanned: {len(scanned_students)}, Absent: {absent_count}")
-        print(f"  Session file deleted: {session_file}")
         
         return {
             "success": True,
@@ -3253,7 +3242,7 @@ async def stop_qr_session(payload: dict, email: str = Depends(verify_token)):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to stop session: {str(e)}")
-        
+
 @app.get("/qr/debug/{class_id}")
 async def debug_qr_session(class_id: str, date: str, email: str = Depends(verify_token)):
     """Debug endpoint to see raw session data"""
